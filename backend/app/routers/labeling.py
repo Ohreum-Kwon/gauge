@@ -1,8 +1,10 @@
+import random
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlmodel import Session, exists, func, select
+from sqlmodel import Session, func, select
 
 from app.db import get_session
-from app.deps import get_visible_project, require_role
+from app.deps import get_rng, get_visible_project, require_role
 from app.models import (
     Assignment,
     AssignmentStatus,
@@ -11,11 +13,11 @@ from app.models import (
     Project,
     Role,
     User,
-    utcnow,
 )
-from app.schemas import LabelCreate, LabelOut, Progress, Task, TaskItem
-from app.services import audit
-from app.services.queue import get_or_assign_next
+from app.schemas import GoldAccuracy, LabelCreate, LabelOut, Progress, Task, TaskItem
+from app.services import quality
+from app.services.labeling import submit_label
+from app.services.queue import get_or_assign_next, remaining_regular_items
 
 router = APIRouter(tags=["labeling"])
 
@@ -31,8 +33,9 @@ def next_task(
     project: Project = Depends(get_visible_project),
     user: User = Depends(labeler_only),
     session: Session = Depends(get_session),
+    rng: random.Random = Depends(get_rng),
 ) -> Task | Response:
-    assignment = get_or_assign_next(session, project, user)
+    assignment = get_or_assign_next(session, project, user, rng)
     if assignment is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     item = session.get(Item, assignment.item_id)
@@ -51,16 +54,13 @@ def progress(
     user: User = Depends(labeler_only),
     session: Session = Depends(get_session),
 ) -> Progress:
+    """Labels done and regular items left. Gold items are mixed in on top, so the total
+    a labeler ends up doing is a little higher than completed + remaining."""
     completed = session.exec(
         select(func.count())
         .select_from(Label)
         .join(Item)
         .where(Item.project_id == project.id, Label.user_id == user.id)
-    ).one()
-    unassigned = session.exec(
-        select(func.count()).where(
-            Item.project_id == project.id, ~exists().where(Assignment.item_id == Item.id)
-        )
     ).one()
     pending = session.exec(
         select(func.count())
@@ -72,11 +72,30 @@ def progress(
             Assignment.status == AssignmentStatus.pending,
         )
     ).one()
-    return Progress(completed=completed, remaining=unassigned + pending)
+    return Progress(
+        completed=completed, remaining=remaining_regular_items(session, project, user) + pending
+    )
+
+
+@router.get("/projects/{project_id}/queue/accuracy")
+def my_accuracy(
+    project: Project = Depends(get_visible_project),
+    user: User = Depends(labeler_only),
+    session: Session = Depends(get_session),
+) -> GoldAccuracy:
+    """The labeler's own accuracy on gold items so far. Only totals, so it can't reveal
+    which items were gold."""
+    gold = [r for r in quality.load_rows(session, project, user_id=user.id) if r.is_gold]
+    correct = sum(not r.is_error for r in gold)
+    return GoldAccuracy(
+        gold_answered=len(gold),
+        gold_correct=correct,
+        accuracy=correct / len(gold) if gold else None,
+    )
 
 
 @router.post("/assignments/{assignment_id}/label", status_code=status.HTTP_201_CREATED)
-def submit_label(
+def create_label(
     assignment_id: int,
     body: LabelCreate,
     user: User = Depends(labeler_only),
@@ -85,35 +104,5 @@ def submit_label(
     assignment = session.get(Assignment, assignment_id, with_for_update=True)
     if assignment is None or assignment.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Assignment not found")
-    if assignment.status != AssignmentStatus.pending:
-        raise HTTPException(status.HTTP_409_CONFLICT, "This item is already labeled")
-
-    item = session.get(Item, assignment.item_id)
-    project = session.get(Project, item.project_id)
-    if body.value not in project.label_options:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"'{body.value}' is not a label option for this project",
-        )
-
-    label = Label(
-        item_id=item.id,
-        user_id=user.id,
-        assignment_id=assignment.id,
-        value=body.value,
-        time_spent_ms=body.time_spent_ms,
-    )
-    assignment.status = AssignmentStatus.completed
-    assignment.completed_at = utcnow()
-    session.add_all([label, assignment])
-    session.flush()
-    audit.record(
-        session,
-        user,
-        "label.create",
-        "label",
-        label.id,
-        after={"item_id": item.id, "value": body.value, "time_spent_ms": body.time_spent_ms},
-    )
-    session.commit()
+    label = submit_label(session, assignment, user, body.value, body.time_spent_ms)
     return LabelOut.model_validate(label, from_attributes=True)

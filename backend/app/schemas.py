@@ -1,7 +1,7 @@
 """Request and response bodies. Kept apart from the table models so the API can't leak
 columns such as password hashes or gold answers by accident."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -33,6 +33,8 @@ class ProjectCreate(BaseModel):
     label_options: list[str] = Field(min_length=2, max_length=50)
     gold_rate: float = Field(default=0.1, ge=0, le=1)
     overlap_rate: float = Field(default=0.1, ge=0, le=1)
+    overlap_labelers: int = Field(default=3, ge=2, le=20)
+    target_error_rate: float = Field(default=0.1, gt=0, lt=1)
 
     @field_validator("label_options")
     @classmethod
@@ -52,6 +54,8 @@ class ProjectOut(BaseModel):
     label_options: list[str]
     gold_rate: float
     overlap_rate: float
+    overlap_labelers: int
+    target_error_rate: float
     created_at: datetime
 
 
@@ -112,3 +116,67 @@ class LabelOut(BaseModel):
 class Progress(BaseModel):
     completed: int
     remaining: int
+
+
+class GoldAccuracy(BaseModel):
+    gold_answered: int
+    gold_correct: int
+    accuracy: float | None
+
+
+class AlertOut(BaseModel):
+    day: date
+    rule: str
+    description: str
+    # True when the labeler is worse than target; False flags unusually good work.
+    above: bool
+
+
+class ChartPointOut(BaseModel):
+    day: date
+    gold_answered: int
+    errors: int
+    error_rate: float
+    ucl: float
+    lcl: float
+
+
+class ControlChart(BaseModel):
+    user_id: int
+    center: float
+    points: list[ChartPointOut]
+    alerts: list[AlertOut]
+
+
+class LabelerQualityOut(BaseModel):
+    user_id: int
+    email: str
+    labels: int
+    gold_answered: int
+    gold_correct: int
+    accuracy: float | None
+    median_time_ms: int | None
+    # Share of labels submitted in under a second.
+    fast_share: float | None
+    status: str
+    latest_alert: AlertOut | None
+
+
+class PairAgreementOut(BaseModel):
+    user_a: int
+    user_b: int
+    kappa: float | None
+    shared_items: int
+
+
+class AgreementOut(BaseModel):
+    fleiss_kappa: float | None
+    overlap_items: int
+    raters_per_item: int
+    pairs: list[PairAgreementOut]
+
+
+class ProjectQuality(BaseModel):
+    target_error_rate: float
+    labelers: list[LabelerQualityOut]
+    agreement: AgreementOut

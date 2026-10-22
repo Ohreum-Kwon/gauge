@@ -22,6 +22,10 @@ export default function LabelPage() {
     queryKey: ['progress', projectId],
     queryFn: () => api.progress(projectId),
   })
+  const accuracy = useQuery({
+    queryKey: ['accuracy', projectId],
+    queryFn: () => api.myAccuracy(projectId),
+  })
 
   const submit = useMutation({
     mutationFn: ({ t, value, ms }: { t: Task; value: string; ms: number }) =>
@@ -29,6 +33,7 @@ export default function LabelPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['task', projectId] })
       void queryClient.invalidateQueries({ queryKey: ['progress', projectId] })
+      void queryClient.invalidateQueries({ queryKey: ['accuracy', projectId] })
     },
   })
 
@@ -51,6 +56,12 @@ export default function LabelPage() {
         )}
       </div>
       {total > 0 && <progress value={done} max={total} />}
+      {accuracy.data?.accuracy != null && (
+        <p className="muted" aria-label="accuracy">
+          Your accuracy on check questions: {Math.round(accuracy.data.accuracy * 100)}% (
+          {accuracy.data.gold_correct} of {accuracy.data.gold_answered})
+        </p>
+      )}
       {task.data === null ? (
         <div className="card">
           <h2>All done</h2>

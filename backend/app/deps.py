@@ -1,3 +1,4 @@
+import random
 from collections.abc import Callable
 
 from fastapi import Depends, HTTPException, status
@@ -50,3 +51,8 @@ def get_visible_project(
     if project is None or not is_member:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
     return project
+
+
+def get_rng() -> random.Random:
+    """Randomness for gold draws and overlap picks. Tests override it to fix the outcome."""
+    return random.Random()

@@ -17,6 +17,8 @@ export interface Project {
   label_options: string[]
   gold_rate: number
   overlap_rate: number
+  overlap_labelers: number
+  target_error_rate: number
   created_at: string
 }
 
@@ -32,6 +34,8 @@ export interface ProjectCreate {
   label_options: string[]
   gold_rate: number
   overlap_rate: number
+  overlap_labelers: number
+  target_error_rate: number
 }
 
 export interface Item {
@@ -57,4 +61,10 @@ export interface Progress {
 export interface UploadResult {
   created: number
   gold: number
+}
+
+export interface GoldAccuracy {
+  gold_answered: number
+  gold_correct: number
+  accuracy: number | null
 }
