@@ -287,3 +287,9 @@ code {
   max-height: 8rem;
   overflow: hidden;
 }
+
+.settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}

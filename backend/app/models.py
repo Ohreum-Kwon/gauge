@@ -65,6 +65,10 @@ class Project(SQLModel, table=True):
     gold_rate: float = Field(default=0.1, ge=0, le=1)
     # Share of items that get labeled by more than one person, for agreement stats.
     overlap_rate: float = Field(default=0.1, ge=0, le=1)
+    # How many labelers each overlap item goes to.
+    overlap_labelers: int = Field(default=3, sa_column_kwargs={"server_default": "3"})
+    # The acceptable gold error rate: the center line of each labeler's control chart.
+    target_error_rate: float = Field(default=0.1, sa_column_kwargs={"server_default": "0.1"})
     created_by: int = Field(foreign_key="users.id")
     created_at: datetime = created_at_field()
 
@@ -85,8 +89,10 @@ class Item(SQLModel, table=True):
     project_id: int = Field(foreign_key="projects.id", index=True, ondelete="CASCADE")
     # Shape depends on the task type, e.g. {"image_url": ...} for image classification.
     payload: dict[str, Any] = Field(sa_column=Column(JsonType, nullable=False))
-    # Set only for gold items. Never sent to labelers.
+    # Set only for gold items. Never sent to labelers. Every labeler may see each gold item.
     gold_answer: str | None = None
+    # How many labelers a regular item goes to: 1, or project.overlap_labelers for overlap items.
+    required_labels: int = Field(default=1, sa_column_kwargs={"server_default": "1"})
     created_at: datetime = created_at_field()
 
 

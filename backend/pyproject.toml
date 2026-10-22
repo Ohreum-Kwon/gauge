@@ -34,3 +34,5 @@ ignore = ["B008"]  # FastAPI's Depends() in argument defaults is idiomatic
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = ["slow: end-to-end simulation tests (run with -m slow)"]

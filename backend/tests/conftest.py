@@ -3,6 +3,7 @@ relies on Postgres row locking. Each test runs inside a transaction that is roll
 afterwards, so tests don't see each other's data."""
 
 import os
+import random
 from collections.abc import Callable, Iterator
 
 import pytest
@@ -11,6 +12,7 @@ from sqlalchemy import create_engine
 from sqlmodel import Session, SQLModel
 
 from app.db import get_session
+from app.deps import get_rng
 from app.main import create_app
 from app.models import Role, User
 from app.security import create_access_token, hash_password
@@ -41,10 +43,23 @@ def session(engine) -> Iterator[Session]:
         transaction.rollback()
 
 
+class FixedRandom(random.Random):
+    """random() always returns the same value, so gold draws and overlap picks are fixed:
+    with the default, a rate of 1 always fires and any rate below 0.999 never does."""
+
+    def __init__(self, value: float = 0.999):
+        super().__init__(0)
+        self.value = value
+
+    def random(self) -> float:
+        return self.value
+
+
 @pytest.fixture
 def client(session: Session) -> Iterator[TestClient]:
     app = create_app()
     app.dependency_overrides[get_session] = lambda: session
+    app.dependency_overrides[get_rng] = FixedRandom
     with TestClient(app) as client:
         yield client
 

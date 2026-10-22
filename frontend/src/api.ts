@@ -1,4 +1,5 @@
 import type {
+  GoldAccuracy,
   Item,
   Progress,
   Project,
@@ -85,6 +86,7 @@ export const api = {
   nextTask: async (projectId: number) =>
     (await request<Task | undefined>(`/projects/${projectId}/queue/next`)) ?? null,
   progress: (projectId: number) => request<Progress>(`/projects/${projectId}/queue/progress`),
+  myAccuracy: (projectId: number) => request<GoldAccuracy>(`/projects/${projectId}/queue/accuracy`),
   submitLabel: (assignmentId: number, value: string, timeSpentMs: number) =>
     request(`/assignments/${assignmentId}/label`, {
       method: 'POST',
