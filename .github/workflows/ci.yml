@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gauge
+          POSTGRES_PASSWORD: gauge
+          POSTGRES_DB: gauge
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gauge" --health-interval 2s
+          --health-timeout 3s --health-retries 20
+    env:
+      GAUGE_DATABASE_URL: postgresql+psycopg://gauge:gauge@localhost:5432/gauge
+      GAUGE_TEST_DATABASE_URL: postgresql+psycopg://gauge:gauge@localhost:5432/gauge_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Migrations apply, match the models, and roll back
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
+          uv run alembic downgrade base
+      - name: Test
+        run: |
+          PGPASSWORD=gauge psql -h localhost -U gauge -c "CREATE DATABASE gauge_test"
+          uv run pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
