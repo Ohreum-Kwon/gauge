@@ -1,0 +1,21 @@
+# Render Blueprint: one free web service running the root Dockerfile (API + frontend).
+# The database is Neon's free Postgres; paste its connection string when Render asks
+# for GAUGE_DATABASE_URL. See "Deploy" in the README.
+services:
+  - type: web
+    name: gauge
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: GAUGE_DATABASE_URL
+        sync: false
+      - key: GAUGE_JWT_SECRET
+        generateValue: true
+      - key: GAUGE_ENVIRONMENT
+        value: production
+      # Create the demo accounts and run the labeling simulation on first start.
+      - key: GAUGE_DEMO
+        value: "1"

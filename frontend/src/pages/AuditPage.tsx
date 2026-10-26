@@ -4,7 +4,14 @@ import { api } from '../api'
 
 const PAGE_SIZE = 50
 
-const ACTIONS = ['user.create', 'project.create', 'items.upload', 'label.create', 'item.resolve']
+const ACTIONS = [
+  'user.create',
+  'project.create',
+  'project.members.update',
+  'items.upload',
+  'label.create',
+  'item.resolve',
+]
 
 export default function AuditPage() {
   const [action, setAction] = useState('')

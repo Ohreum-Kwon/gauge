@@ -10,8 +10,11 @@ chart**, so someone drifting out of control gets flagged before their labels rea
 dataset. The name comes from *Gauge R&R*, the measurement-system analysis quality
 engineers use on factory gauges.
 
-> **Status:** step 3 of 4. Labeling, quality dashboards with control charts, the review
-> queue and the audit log all work. Deployment is next.
+![A reviewer opens the quality dashboard, finds the labeler who drifted on day 6, and resolves a flagged item](docs/demo.gif)
+
+**Try it:** the live demo runs on Render's free tier, so the first request after a
+quiet spell takes about a minute while the server wakes up. Sign in with one of the
+demo accounts on the login page.
 
 ## Stack
 
@@ -21,6 +24,66 @@ engineers use on factory gauges.
 | Database | Postgres 16 |
 | Frontend | React, TypeScript, Vite, TanStack Query, React Router |
 | Tests and CI | pytest against real Postgres, Vitest with Testing Library, ruff, oxlint, Prettier, GitHub Actions |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Browser
+        SPA["React app<br/>(TanStack Query, Recharts)"]
+    end
+    subgraph Render["Render web service (one Docker container)"]
+        Static["Built frontend<br/>(served by FastAPI)"]
+        API["FastAPI /api<br/>auth · projects · queue · labels<br/>quality · review · audit"]
+        Stats["stats.py<br/>kappa · p-charts · WE rules<br/>(pure functions)"]
+        API --> Stats
+    end
+    DB[("Neon Postgres<br/>items · assignments · labels<br/>resolutions · audit_log")]
+    SPA -- "GET /" --> Static
+    SPA -- "JSON + JWT" --> API
+    API -- "SQLModel<br/>FOR UPDATE SKIP LOCKED" --> DB
+```
+
+A labeler asks for the next item; the queue picks a gold item with probability
+`gold_rate`, otherwise the next regular item that still needs labels, locking it so two
+labelers never get the same one. Labels are written with an audit entry in the same
+transaction. Quality reports are computed on read from the label table: small enough
+at demo scale, and it keeps one source of truth (see the design notes for when that
+would change).
+
+## Design notes
+
+- **Statistics as pure functions.** `stats.py` knows nothing about the database; it
+  takes counts and returns kappas, chart points and rule violations. That made it easy
+  to test against published examples (Fleiss 1971 gives κ = 0.210 on his data, and so
+  does this code), and keeps the SQL in the service layer simple.
+- **The center line is a target, not the labeler's own mean.** A textbook p-chart
+  centers on the process average. Here that would let a consistently bad labeler look
+  "in control". Centering on the project's `target_error_rate` flags them on day one.
+  Limits are per day, because each day has a different number of gold answers.
+- **Trusted labels, not banned labelers.** A label counts toward the final answer
+  unless its labeler was out of control on the day it was given. Someone who drifts on
+  day 6 keeps their good work from days 1 to 5. Items go to a person only when trusted
+  labels can't settle them, which kept the simulated review queue to about 700 items rather
+  than 1,081.
+- **Postgres row locks for the queue.** `SELECT … FOR UPDATE SKIP LOCKED` hands out
+  items without a separate queue service and without double assignment. It's also why
+  the tests run against real Postgres rather than SQLite.
+- **Simulated labelers through the real code path.** The demo data comes from four
+  scripted labelers calling the same queue and label services as people do, so the
+  dashboards are exercised end to end, and a slow CI test checks the drifter is caught
+  on day 6.
+- **One container, one origin.** In production FastAPI also serves the built frontend.
+  That means one free Render service, no CORS, and no API URL to wire between services.
+  In development Vite serves the frontend and proxies `/api`.
+- **Audited in the same transaction.** Creating users and projects, changing members,
+  uploading items, labeling and resolving each write an audit entry (with before and
+  after) in the transaction that makes the change, so the log can't drift from the data.
+
+**What I'd change at scale:** compute daily quality aggregates incrementally (a table
+updated on each label, or a materialized view) instead of on every dashboard read; move
+the demo simulation into a one-off job; and add rate limiting and per-project roles
+before letting strangers create projects on the public demo.
 
 ## Run it locally
 
@@ -99,6 +162,22 @@ Admins can export final labels as CSV (`source` is `resolution`, `majority` or
 `unresolved`). Every change, including each resolution with its before and after, is in
 the audit log.
 
+## Deploy
+
+Free hosting: [Render](https://render.com) runs the container and
+[Neon](https://neon.tech) hosts Postgres. Both let you sign in with GitHub.
+
+1. **Neon:** create a project (pick an AWS US West region to sit near Render's Oregon
+   region) and copy its connection string, the one starting `postgresql://`.
+2. **Render:** choose **New → Blueprint**, connect this repository, and paste the Neon
+   connection string when it asks for `GAUGE_DATABASE_URL`. Render reads
+   [`render.yaml`](render.yaml), builds the root [`Dockerfile`](Dockerfile), generates
+   the JWT secret, and deploys.
+3. The first start runs migrations, creates the demo accounts, and starts the labeling
+   simulation in the background (a few minutes). Pushes to `main` redeploy.
+
+Set `GAUGE_DEMO` to `0` in Render to stop loading demo data.
+
 ## Tests
 
 ```sh
@@ -144,6 +223,8 @@ frontend/
     pages/            login, projects, project admin, labeling, quality, review, audit log
     components/       control chart, status badge, item view
 scripts/              demo data
+Dockerfile            production image: API plus built frontend
+render.yaml           Render Blueprint
 ```
 
 ## Roadmap
@@ -151,6 +232,11 @@ scripts/              demo data
 1. **Skeleton:** auth with roles, projects, upload, labeling UI, CI
 2. **Quality engine:** gold mixing, overlap assignment, accuracy, Cohen's and Fleiss'
    kappa, p-charts with Western Electric rules, simulated labelers
-3. **Dashboards and review** (this step): per-labeler control charts, drift alerts, reviewer queue,
+3. **Dashboards and review:** per-labeler control charts, drift alerts, reviewer queue,
    audit log viewer
-4. **Ship it:** deploy on Render and Neon, demo GIF, architecture diagram, design notes
+4. **Ship it** (this step): deploy on Render and Neon, demo GIF, architecture diagram,
+   design notes
+
+Next, if there's time: the pairwise preference labeling UI (the upload format already
+supports it) and an LLM labeler that joins the queue as one more labeler, measured on
+the same control chart as the people.

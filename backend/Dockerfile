@@ -12,4 +12,4 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY . .
 EXPOSE 8000
 # Migrate on start: the free Render tier has no separate release step.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "scripts/start.sh"]
