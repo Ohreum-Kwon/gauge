@@ -1,18 +1,26 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEV_JWT_SECRET = "dev-only-secret-change-me-in-production"
+# `neon env pull` writes DATABASE_URL to .env.local in the repo root.
+NEON_ENV_FILE = Path(__file__).resolve().parents[2] / ".env.local"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="GAUGE_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(NEON_ENV_FILE, ".env"), env_prefix="GAUGE_", extra="ignore"
+    )
 
     # "production" refuses to start with the development JWT secret.
     environment: str = "development"
-    database_url: str = "postgresql+psycopg://gauge:gauge@localhost:5432/gauge"
+    # GAUGE_DATABASE_URL wins; otherwise Neon's DATABASE_URL (its pooled connection).
+    database_url: str = Field(
+        "postgresql+psycopg://gauge:gauge@localhost:5432/gauge",
+        validation_alias=AliasChoices("GAUGE_DATABASE_URL", "DATABASE_URL"),
+    )
     jwt_secret: str = DEV_JWT_SECRET
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 12

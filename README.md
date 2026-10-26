@@ -12,7 +12,7 @@ engineers use on factory gauges.
 
 ![A reviewer opens the quality dashboard, finds the labeler who drifted on day 6, and resolves a flagged item](docs/demo.gif)
 
-**Try it:** the live demo runs on Render's free tier, so the first request after a
+**Try it:** [the live demo](https://gauge-w270.onrender.com) runs on Render's free tier, so the first request after a
 quiet spell takes about a minute while the server wakes up. Sign in with one of the
 demo accounts on the login page.
 
@@ -168,7 +168,8 @@ Free hosting: [Render](https://render.com) runs the container and
 [Neon](https://neon.tech) hosts Postgres. Both let you sign in with GitHub.
 
 1. **Neon:** create a project (pick an AWS US West region to sit near Render's Oregon
-   region) and copy its connection string, the one starting `postgresql://`.
+   region) and copy its pooled connection string (host ending `-pooler…`). Migrations
+   connect directly by dropping `-pooler` from the host; the server uses the pooler.
 2. **Render:** choose **New → Blueprint**, connect this repository, and paste the Neon
    connection string when it asks for `GAUGE_DATABASE_URL`. Render reads
    [`render.yaml`](render.yaml), builds the root [`Dockerfile`](Dockerfile), generates
@@ -177,6 +178,10 @@ Free hosting: [Render](https://render.com) runs the container and
    simulation in the background (a few minutes). Pushes to `main` redeploy.
 
 Set `GAUGE_DEMO` to `0` in Render to stop loading demo data.
+
+To run the backend locally against Neon instead of Docker's Postgres, run `neon deploy`
+(or `neon env pull`) in the repo root. It writes `DATABASE_URL` to `.env.local`, which
+the backend reads when `GAUGE_DATABASE_URL` isn't set.
 
 ## Tests
 
