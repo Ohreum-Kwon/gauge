@@ -25,10 +25,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, func, select
 
 from app.db import get_engine
-from app.models import Item, Project, ProjectMember, Role, TaskType, User
+from app.models import Item, Label, Project, ProjectMember, Role, TaskType, User
 from app.security import hash_password
 from app.seed import CIFAR_CLASSES, CIFAR_CSV
 from app.services.labeling import submit_label
@@ -68,7 +68,9 @@ def simulate(session: Session, reset: bool = False, seed: int = 7) -> Project:
     rng = random.Random(seed)
     existing = session.exec(select(Project).where(Project.name == PROJECT_NAME)).first()
     if existing is not None:
-        if not reset:
+        # A run cut short (say, by a server restart) leaves a partial week; redo it.
+        complete = _simulated_labels(session, existing) == DAYS * LABELS_PER_DAY * len(PERSONAS)
+        if complete and not reset:
             print(f"'{PROJECT_NAME}' already exists; pass --reset to simulate again")
             return existing
         session.delete(existing)
@@ -111,6 +113,17 @@ def simulate(session: Session, reset: bool = False, seed: int = 7) -> Project:
                 submit_label(session, assignment, user, value, ms, at=clocks[persona.name])
         print(f"Day {day}: {LABELS_PER_DAY} labels each from {len(PERSONAS)} labelers")
     return project
+
+
+def _simulated_labels(session: Session, project: Project) -> int:
+    """Labels the personas gave, ignoring any that demo visitors added since."""
+    return session.exec(
+        select(func.count())
+        .select_from(Label)
+        .join(Item)
+        .join(User, col(User.id) == Label.user_id)
+        .where(Item.project_id == project.id, col(User.email).in_([p.email for p in PERSONAS]))
+    ).one()
 
 
 def _create_items(session: Session, project: Project, rng: random.Random) -> dict[int, str]:

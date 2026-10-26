@@ -65,3 +65,32 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  # The production image Render deploys: build it, start it, and check that it serves
+  # both the API and the frontend.
+  image:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gauge
+          POSTGRES_PASSWORD: gauge
+          POSTGRES_DB: gauge
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gauge" --health-interval 2s
+          --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t gauge .
+      - name: Start the container and check it
+        run: |
+          docker run -d --name gauge --network host \
+            -e GAUGE_DATABASE_URL=postgresql://gauge:gauge@localhost:5432/gauge \
+            -e GAUGE_ENVIRONMENT=production -e GAUGE_JWT_SECRET=ci-only-secret-0123456789abcdef \
+            -e PORT=8000 gauge
+          for i in $(seq 1 30); do curl -sf localhost:8000/api/health && break; sleep 1; done
+          curl -sf localhost:8000/api/health
+          curl -sf localhost:8000/projects | grep -q 'id="root"'
+          docker logs gauge
