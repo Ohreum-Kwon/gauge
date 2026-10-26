@@ -44,6 +44,8 @@ jobs:
         run: |
           PGPASSWORD=gauge psql -h localhost -U gauge -c "CREATE DATABASE gauge_test"
           uv run pytest
+      - name: Simulation reproduces the drift demo
+        run: uv run pytest -m slow
 
   frontend:
     runs-on: ubuntu-latest

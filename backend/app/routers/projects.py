@@ -1,9 +1,11 @@
+import random
+
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlmodel import Session, col, func, select
 
 from app.config import get_settings
 from app.db import get_session
-from app.deps import get_current_user, get_visible_project, require_role
+from app.deps import get_current_user, get_rng, get_visible_project, require_role
 from app.models import Item, Label, Project, ProjectMember, Role, User
 from app.schemas import (
     ItemOut,
@@ -124,6 +126,7 @@ async def upload_items(
     project: Project = Depends(get_visible_project),
     admin: User = Depends(admin_only),
     session: Session = Depends(get_session),
+    rng: random.Random = Depends(get_rng),
 ) -> UploadResult:
     """Add items from a CSV or JSON file. Rows with a gold_answer become gold items."""
     max_bytes = get_settings().max_upload_bytes
@@ -138,7 +141,13 @@ async def upload_items(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
     session.add_all(
-        Item(project_id=project.id, payload=p.payload, gold_answer=p.gold_answer) for p in parsed
+        Item(
+            project_id=project.id,
+            payload=p.payload,
+            gold_answer=p.gold_answer,
+            required_labels=_required_labels(project, p.gold_answer, rng),
+        )
+        for p in parsed
     )
     gold = sum(p.gold_answer is not None for p in parsed)
     audit.record(
@@ -175,6 +184,13 @@ def list_items(
         ItemOut(id=item.id, payload=item.payload, gold_answer=item.gold_answer, label_count=n)
         for item, n in rows
     ]
+
+
+def _required_labels(project: Project, gold_answer: str | None, rng: random.Random) -> int:
+    """Pick overlap items at upload: each regular item has an overlap_rate chance."""
+    if gold_answer is None and rng.random() < project.overlap_rate:
+        return project.overlap_labelers
+    return 1
 
 
 def _by_id(user: User) -> int:

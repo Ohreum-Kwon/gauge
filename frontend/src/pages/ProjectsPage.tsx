@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
-import type { Project, TaskType } from '../types'
+import type { Project, ProjectCreate, TaskType } from '../types'
 
 const TASK_TYPE_NAMES: Record<TaskType, string> = {
   image_classification: 'Image classification',
@@ -59,14 +59,67 @@ function ProjectRow({ project }: { project: Project }) {
   )
 }
 
+type Settings = Pick<
+  ProjectCreate,
+  'gold_rate' | 'overlap_rate' | 'overlap_labelers' | 'target_error_rate'
+>
+
+const DEFAULT_SETTINGS: Settings = {
+  gold_rate: 0.1,
+  overlap_rate: 0.1,
+  overlap_labelers: 3,
+  target_error_rate: 0.1,
+}
+
+const SETTING_FIELDS: {
+  key: keyof Settings
+  label: string
+  help: string
+  min: number
+  max: number
+  step: number
+}[] = [
+  {
+    key: 'gold_rate',
+    label: 'Gold rate',
+    help: 'Share of each queue drawn from gold items with known answers',
+    min: 0,
+    max: 1,
+    step: 0.05,
+  },
+  {
+    key: 'overlap_rate',
+    label: 'Overlap rate',
+    help: 'Share of items labeled by several people, for agreement',
+    min: 0,
+    max: 1,
+    step: 0.05,
+  },
+  {
+    key: 'overlap_labelers',
+    label: 'Labelers per overlap item',
+    help: 'How many people label each overlap item',
+    min: 2,
+    max: 20,
+    step: 1,
+  },
+  {
+    key: 'target_error_rate',
+    label: 'Target error rate',
+    help: 'Acceptable gold error rate: the center line of each control chart',
+    min: 0.01,
+    max: 0.99,
+    step: 0.01,
+  },
+]
+
 function NewProjectForm() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [taskType, setTaskType] = useState<TaskType>('image_classification')
   const [options, setOptions] = useState('')
-  const [goldRate, setGoldRate] = useState(0.1)
-  const [overlapRate, setOverlapRate] = useState(0.1)
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS)
 
   const create = useMutation({
     mutationFn: api.createProject,
@@ -85,8 +138,7 @@ function NewProjectForm() {
         .split(',')
         .map((o) => o.trim())
         .filter(Boolean),
-      gold_rate: goldRate,
-      overlap_rate: overlapRate,
+      ...settings,
     })
   }
 
@@ -116,29 +168,20 @@ function NewProjectForm() {
           required
         />
       </label>
-      <div className="row">
-        <label>
-          Gold rate
-          <input
-            type="number"
-            min={0}
-            max={1}
-            step={0.05}
-            value={goldRate}
-            onChange={(e) => setGoldRate(Number(e.target.value))}
-          />
-        </label>
-        <label>
-          Overlap rate
-          <input
-            type="number"
-            min={0}
-            max={1}
-            step={0.05}
-            value={overlapRate}
-            onChange={(e) => setOverlapRate(Number(e.target.value))}
-          />
-        </label>
+      <div className="settings">
+        {SETTING_FIELDS.map((field) => (
+          <label key={field.key} title={field.help}>
+            {field.label}
+            <input
+              type="number"
+              min={field.min}
+              max={field.max}
+              step={field.step}
+              value={settings[field.key]}
+              onChange={(e) => setSettings({ ...settings, [field.key]: Number(e.target.value) })}
+            />
+          </label>
+        ))}
       </div>
       {create.error && <p className="error">{create.error.message}</p>}
       <button type="submit" disabled={create.isPending}>

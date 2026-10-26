@@ -26,6 +26,9 @@ function renderLabelPage(tasks: (Task | null)[]) {
     'GET /api/projects/7/queue/progress': () => ({
       body: { completed: tasks.length - queue.length, remaining: queue.filter(Boolean).length },
     }),
+    'GET /api/projects/7/queue/accuracy': () => ({
+      body: { gold_answered: 4, gold_correct: 3, accuracy: 0.75 },
+    }),
   })
   // Any POST to /assignments/:id/label records the body and advances the queue.
   const original = fetchMock.getMockImplementation()!
@@ -79,6 +82,11 @@ describe('LabelPage', () => {
     await screen.findByRole('img')
     await userEvent.keyboard('9')
     expect(submitted).toHaveLength(0)
+  })
+
+  it("shows the labeler's accuracy on check questions", async () => {
+    renderLabelPage([task(1)])
+    expect(await screen.findByLabelText('accuracy')).toHaveTextContent('75% (3 of 4)')
   })
 
   it('says when the queue is empty', async () => {
