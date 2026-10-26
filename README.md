@@ -10,8 +10,8 @@ chart**, so someone drifting out of control gets flagged before their labels rea
 dataset. The name comes from *Gauge R&R*, the measurement-system analysis quality
 engineers use on factory gauges.
 
-> **Status:** step 2 of 4. Labeling, gold mixing, overlap, agreement and control charts
-> work through the API. Dashboards for them are next.
+> **Status:** step 3 of 4. Labeling, quality dashboards with control charts, the review
+> queue and the audit log all work. Deployment is next.
 
 ## Stack
 
@@ -63,7 +63,7 @@ Demo accounts all use the password `gauge-demo`:
 |---|---|
 | admin@gauge.dev | Admin: creates projects, uploads items, assigns members |
 | labeler1@gauge.dev … labeler4@gauge.dev | Labeler: works through a queue |
-| reviewer@gauge.dev | Reviewer: resolves flagged items (coming in step 3) |
+| reviewer@gauge.dev | Reviewer: watches quality dashboards and resolves items in the review queue |
 | sim-reliable, sim-noisy, sim-drifter, sim-rusher @gauge.dev | Simulated labelers |
 
 ## How quality is measured
@@ -84,6 +84,20 @@ examples (Fleiss 1971, among others).
 the real queue: one reliable (95% right), one noisy (70%), one who drifts from 95% to 60%
 on day 6, and one who clicks the first option in half a second every time. The drifter's
 chart goes out of control on day 6, which a slow test in CI checks on every push.
+
+## Review and final labels
+
+A label is **trusted** unless its labeler's control chart was out of control (worse than
+target) on the day they gave it. Each item's final label is a reviewer's resolution if
+there is one, otherwise the majority of its trusted labels. Items with no trusted
+majority (a tie, or only untrusted labels) go to the **review queue**, where a reviewer
+sees every label, who gave it, and which were untrusted, and picks the answer. Items
+whose trusted labels agree skip review even when an untrusted label disagreed, so
+reviewers only see what the data can't settle on its own.
+
+Admins can export final labels as CSV (`source` is `resolution`, `majority` or
+`unresolved`). Every change, including each resolution with its before and after, is in
+the audit log.
 
 ## Tests
 
@@ -117,9 +131,9 @@ backend/
   app/
     models.py         tables
     schemas.py        API request/response bodies (kept apart so hashes and gold answers can't leak)
-    routers/          auth, users, projects, labeling
+    routers/          auth, users, projects, labeling, quality, review, audit log
     stats.py          kappa, p-charts, Western Electric rules (pure functions)
-    services/         queue selection, quality reports, file ingest, audit log
+    services/         queue selection, quality reports, review queue, file ingest, audit log
     simulate.py       simulated labelers for the drift demo
   alembic/            migrations
   tests/
@@ -127,15 +141,16 @@ frontend/
   src/
     api.ts            typed API client
     auth.tsx          token and current-user context
-    pages/            login, projects, project admin, labeling
+    pages/            login, projects, project admin, labeling, quality, review, audit log
+    components/       control chart, status badge, item view
 scripts/              demo data
 ```
 
 ## Roadmap
 
 1. **Skeleton:** auth with roles, projects, upload, labeling UI, CI
-2. **Quality engine** (this step): gold mixing, overlap assignment, accuracy, Cohen's and Fleiss'
+2. **Quality engine:** gold mixing, overlap assignment, accuracy, Cohen's and Fleiss'
    kappa, p-charts with Western Electric rules, simulated labelers
-3. **Dashboards and review:** per-labeler control charts, drift alerts, reviewer queue,
+3. **Dashboards and review** (this step): per-labeler control charts, drift alerts, reviewer queue,
    audit log viewer
 4. **Ship it:** deploy on Render and Neon, demo GIF, architecture diagram, design notes

@@ -22,6 +22,11 @@ export default function ProjectPage() {
         ← Projects
       </Link>
       <h1>{p.name}</h1>
+      <nav className="links">
+        <Link to={`/projects/${p.id}/quality`}>Quality</Link>
+        <Link to={`/projects/${p.id}/review`}>Review queue</Link>
+        <ExportButton projectId={p.id} />
+      </nav>
       <dl className="stats">
         <Stat label="Items" value={p.item_count} />
         <Stat label="Gold items" value={p.gold_item_count} />
@@ -35,6 +40,33 @@ export default function ProjectPage() {
         <MembersForm projectId={p.id} />
       </div>
       <ItemsTable project={p} />
+    </>
+  )
+}
+
+function ExportButton({ projectId }: { projectId: number }) {
+  const download = useMutation({
+    mutationFn: () => api.exportLabels(projectId),
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `gauge-project-${projectId}-labels.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+    },
+  })
+  return (
+    <>
+      <button
+        type="button"
+        className="link"
+        disabled={download.isPending}
+        onClick={() => download.mutate()}
+      >
+        Export final labels (CSV)
+      </button>
+      {download.error && <span className="error">{download.error.message}</span>}
     </>
   )
 }

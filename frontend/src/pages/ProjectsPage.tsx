@@ -32,9 +32,6 @@ export default function ProjectsPage() {
         ))}
       </ul>
       {user?.role === 'admin' && <NewProjectForm />}
-      {user?.role === 'reviewer' && (
-        <p className="muted">The reviewer queue for flagged items is coming in a later release.</p>
-      )}
     </>
   )
 }
@@ -49,7 +46,13 @@ function ProjectRow({ project }: { project: Project }) {
           {TASK_TYPE_NAMES[project.task_type]} · {project.label_options.length} labels
         </div>
       </div>
-      {user?.role === 'admin' && <Link to={`/projects/${project.id}`}>Manage</Link>}
+      {(user?.role === 'admin' || user?.role === 'reviewer') && (
+        <nav className="links">
+          <Link to={`/projects/${project.id}/quality`}>Quality</Link>
+          <Link to={`/projects/${project.id}/review`}>Review</Link>
+          {user.role === 'admin' && <Link to={`/projects/${project.id}`}>Manage</Link>}
+        </nav>
+      )}
       {user?.role === 'labeler' && (
         <Link className="button" to={`/projects/${project.id}/label`}>
           Start labeling

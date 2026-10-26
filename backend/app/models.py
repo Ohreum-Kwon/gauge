@@ -132,3 +132,16 @@ class AuditLog(SQLModel, table=True):
     before: dict[str, Any] | None = Field(default=None, sa_column=Column(JsonType))
     after: dict[str, Any] | None = Field(default=None, sa_column=Column(JsonType))
     created_at: datetime = created_at_field()
+
+
+class Resolution(SQLModel, table=True):
+    """A reviewer's final label for an item, overriding what labelers said."""
+
+    __tablename__ = "resolutions"
+
+    id: int | None = Field(default=None, primary_key=True)
+    item_id: int = Field(foreign_key="items.id", unique=True, ondelete="CASCADE")
+    value: str = Field(max_length=200)
+    reviewer_id: int | None = Field(default=None, foreign_key="users.id", ondelete="SET NULL")
+    note: str | None = Field(default=None, max_length=1000)
+    created_at: datetime = created_at_field()
