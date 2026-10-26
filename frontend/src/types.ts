@@ -68,3 +68,80 @@ export interface GoldAccuracy {
   gold_correct: number
   accuracy: number | null
 }
+
+export type LabelerStatus = 'in_control' | 'out_of_control' | 'insufficient_data'
+
+export interface Alert {
+  day: string
+  rule: string
+  description: string
+  above: boolean
+}
+
+export interface LabelerQuality {
+  user_id: number
+  email: string
+  labels: number
+  gold_answered: number
+  gold_correct: number
+  accuracy: number | null
+  median_time_ms: number | null
+  fast_share: number | null
+  status: LabelerStatus
+  latest_alert: Alert | null
+}
+
+export interface ProjectQuality {
+  target_error_rate: number
+  labelers: LabelerQuality[]
+  agreement: {
+    fleiss_kappa: number | null
+    overlap_items: number
+    raters_per_item: number
+    pairs: { user_a: number; user_b: number; kappa: number | null; shared_items: number }[]
+  }
+}
+
+export interface ChartPoint {
+  day: string
+  gold_answered: number
+  errors: number
+  error_rate: number
+  ucl: number
+  lcl: number
+}
+
+export interface ControlChart {
+  user_id: number
+  center: number
+  points: ChartPoint[]
+  alerts: Alert[]
+}
+
+export interface ReviewItem {
+  id: number
+  payload: Record<string, string>
+  reasons: ('disagreement' | 'flagged_labeler')[]
+  labels: { user_id: number; email: string; value: string; flagged: boolean }[]
+}
+
+export interface ReviewQueue {
+  total: number
+  items: ReviewItem[]
+}
+
+export interface AuditEntry {
+  id: number
+  actor_email: string | null
+  action: string
+  target_type: string
+  target_id: number | null
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface AuditPage {
+  total: number
+  entries: AuditEntry[]
+}

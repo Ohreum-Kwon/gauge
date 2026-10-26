@@ -180,3 +180,51 @@ class ProjectQuality(BaseModel):
     target_error_rate: float
     labelers: list[LabelerQualityOut]
     agreement: AgreementOut
+
+
+class ReviewLabelOut(BaseModel):
+    user_id: int
+    email: str
+    value: str
+    flagged: bool
+
+
+class ReviewItemOut(BaseModel):
+    id: int
+    payload: dict[str, Any]
+    reasons: list[str]
+    labels: list[ReviewLabelOut]
+
+
+class ReviewQueue(BaseModel):
+    total: int
+    items: list[ReviewItemOut]
+
+
+class ResolutionCreate(BaseModel):
+    value: str = Field(min_length=1, max_length=200)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class ResolutionOut(BaseModel):
+    item_id: int
+    value: str
+    reviewer_id: int | None
+    note: str | None
+    created_at: datetime
+
+
+class AuditEntryOut(BaseModel):
+    id: int
+    actor_email: str | None
+    action: str
+    target_type: str
+    target_id: int | None
+    before: dict[str, Any] | None
+    after: dict[str, Any] | None
+    created_at: datetime
+
+
+class AuditPage(BaseModel):
+    total: int
+    entries: list[AuditEntryOut]

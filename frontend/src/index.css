@@ -10,6 +10,13 @@
   --success: #067647;
   --gold: #b54708;
   --radius: 8px;
+  /* Charts: series color, reserved status colors, and recessive chart ink. */
+  --series-1: #2a78d6;
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-critical: #d03b3b;
+  --chart-grid: #e6e8ec;
+  --chart-limit: #8a909b;
   color-scheme: light dark;
   font-family:
     system-ui,
@@ -33,6 +40,9 @@
     --error: #f97066;
     --success: #47cd89;
     --gold: #fdb022;
+    --series-1: #3987e5;
+    --chart-grid: #2a2e35;
+    --chart-limit: #7d8490;
   }
 }
 
@@ -292,4 +302,223 @@ code {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.75rem;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+td.nowrap {
+  white-space: nowrap;
+}
+
+td button.link {
+  text-align: left;
+}
+
+td.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+tr.selectable {
+  cursor: pointer;
+}
+
+tr.selectable:hover,
+tr.selected {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* Status always pairs its color with an icon and a word. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.status-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.status-icon.good {
+  background: var(--status-good);
+}
+
+.status-icon.critical {
+  background: var(--status-critical);
+}
+
+.status-icon.unknown {
+  background: var(--chart-limit);
+}
+
+section.card,
+.card.table-wrap {
+  margin: 1rem 0;
+}
+
+.chart {
+  height: 300px;
+  margin: 0.5rem 0;
+}
+
+.chart-tooltip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+}
+
+.chart-tooltip p {
+  margin: 0;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.legend span::before {
+  content: '';
+  display: inline-block;
+  width: 1rem;
+  height: 0;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+  border-top: 2px solid var(--series-1);
+}
+
+.legend .limit::before {
+  border-top: 2px dashed var(--chart-limit);
+}
+
+.legend .target::before {
+  border-top: 2px solid var(--chart-limit);
+}
+
+.legend .alert::before {
+  width: 0.6rem;
+  height: 0.6rem;
+  border: none;
+  border-radius: 50%;
+  background: var(--status-critical);
+}
+
+.alerts {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.review-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.review-item {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 560px) {
+  .review-item {
+    grid-template-columns: 1fr;
+  }
+}
+
+.review-item ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0 0.5rem;
+  margin-right: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.flagged {
+  color: var(--error);
+  font-size: 0.85em;
+}
+
+.filters {
+  display: flex;
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.filters label {
+  min-width: 220px;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.diff {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

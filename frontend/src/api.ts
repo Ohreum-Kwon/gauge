@@ -1,10 +1,14 @@
 import type {
+  AuditPage,
+  ControlChart,
   GoldAccuracy,
   Item,
   Progress,
   Project,
   ProjectCreate,
+  ProjectQuality,
   ProjectSummary,
+  ReviewQueue,
   Task,
   UploadResult,
   User,
@@ -29,7 +33,7 @@ export const tokenStore = {
   clear: () => localStorage.removeItem(TOKEN_KEY),
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function send(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers)
   const token = tokenStore.get()
   if (token) headers.set('Authorization', `Bearer ${token}`)
@@ -37,6 +41,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const response = await fetch(`${BASE_URL}/api${path}`, { ...init, headers })
   if (!response.ok) throw new ApiError(response.status, await errorMessage(response))
+  return response
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await send(path, init)
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
@@ -92,4 +101,23 @@ export const api = {
       method: 'POST',
       body: json({ value, time_spent_ms: timeSpentMs }),
     }),
+
+  quality: (projectId: number) => request<ProjectQuality>(`/projects/${projectId}/quality`),
+  controlChart: (projectId: number, userId: number) =>
+    request<ControlChart>(`/projects/${projectId}/quality/labelers/${userId}/chart`),
+
+  reviewQueue: (projectId: number) => request<ReviewQueue>(`/projects/${projectId}/review`),
+  resolve: (projectId: number, itemId: number, value: string) =>
+    request(`/projects/${projectId}/items/${itemId}/resolution`, {
+      method: 'PUT',
+      body: json({ value }),
+    }),
+  /** The final-label CSV, fetched with the token so it can be saved as a file. */
+  exportLabels: async (projectId: number) =>
+    (await send(`/projects/${projectId}/export.csv`)).blob(),
+
+  audit: (offset: number, action?: string) =>
+    request<AuditPage>(
+      `/audit?${new URLSearchParams({ offset: String(offset), limit: '50', ...(action ? { action } : {}) })}`,
+    ),
 }
