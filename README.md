@@ -12,6 +12,10 @@ engineers use on factory gauges.
 
 ![A reviewer opens the quality dashboard, finds the labeler who drifted on day 6, and resolves a flagged item](docs/demo.gif)
 
+Gauge also runs the same statistics on a **display panel production line**: simulated
+end-of-line test data for color, luminance and uniformity, and for TFT backplane
+electricals, on X̄/R and EWMA charts with Cpk. See [Panel line](#panel-line).
+
 **Try it:** [the live demo](https://gauge-w270.onrender.com) runs on Render's free tier, so the first request after a
 quiet spell takes about a minute while the server wakes up. Sign in with one of the
 demo accounts on the login page.
@@ -162,6 +166,54 @@ Admins can export final labels as CSV (`source` is `resolution`, `majority` or
 `unresolved`). Every change, including each resolution with its before and after, is in
 the audit log.
 
+## Panel line
+
+The same SPC engine, pointed at display manufacturing. **Panel line** (admins and
+reviewers) watches end-of-line test results for two simulated production lines, with
+five panels sampled every three hours.
+
+![The panel line grid: L2's luminance and uniformity and L1's TFT Vth and Ion are out of control. Below, L2's luminance X-bar chart drifts down from day 4 while still inside spec.](docs/panel-line.png)
+
+| Group | Metric | How it's derived |
+|---|---|---|
+| Optical | Center white luminance | Center zone of a 3x3 luminance grid |
+| | Luminance uniformity | Dimmest zone over brightest, in percent |
+| | White point error | CIEDE2000 ΔE between the measured white's chromaticity and D65 |
+| | Gamma | Least-squares fit to a 9-step gray ramp, in log-log space |
+| TFT and electrical | Threshold voltage, on current, on/off ratio | Per-panel TFT test readings; the ratio in decades |
+| | Supply current, panel power, refresh rate | Module test at full white |
+
+Spec limits for each metric sit next to its definition in `backend/app/panel.py`.
+
+**Charts.** Each line and metric gets an X̄/R chart (subgroups of 5) and an EWMA (λ =
+0.2) of the subgroup means. Limits come from a three-day baseline (phase I), then stay
+fixed while later subgroups are judged against them (phase II), so a drift can't drag
+the limits along. Cpk is shown for the baseline and for the latest day, so a shrinking
+margin to spec is visible before any panel fails.
+
+**Alarms and warnings.** A point beyond 3σ, or a subgroup range above the R chart's
+limit, is an alarm. The Western Electric zone rules and the EWMA are warnings. With
+every rule as an alarm, a third of healthy charts alarmed in a typical simulated week,
+because twenty charts each have a false alarm rate per point that adds up. Even with
+only Shewhart alarms, about one healthy chart in four false-alarms per week. The demo's
+fixed seed is one where the healthy charts stay quiet; `backend/app/panel_sim.py`
+documents this, and its tests pin the seed.
+
+**The demo week** (`uv run python -m app.panel_sim`, run on start with `GAUGE_DEMO=1`):
+
+- **L2's backlight ages from day 4.** Luminance falls about 0.15% per subgroup, faster at
+  the corners, so uniformity drops too. EWMA and zone-rule warnings come first, then a
+  3σ alarm on day 5. Luminance Cpk falls from 1.92 to 0.97 while panels are still mostly
+  in spec.
+- **L1 builds from a bad TFT lot on day 6.** Vth runs 0.06 V high and on current 8% low.
+  That is well inside spec but about 4.5σ on the X̄ chart, so both alarm at the lot's
+  first subgroup and clear when the next lot arrives.
+- The other sixteen charts stay in control.
+
+The variables-chart math (`backend/app/spc.py`) and the colorimetry (`backend/app/panel.py`)
+are pure functions, tested against hand-worked examples and Sharma, Wu and Dalal's
+CIEDE2000 reference pairs.
+
 ## Deploy
 
 Free hosting: [Render](https://render.com) runs the container and
@@ -215,18 +267,21 @@ backend/
   app/
     models.py         tables
     schemas.py        API request/response bodies (kept apart so hashes and gold answers can't leak)
-    routers/          auth, users, projects, labeling, quality, review, audit log
+    routers/          auth, users, projects, labeling, quality, review, audit log, panel line
     stats.py          kappa, p-charts, Western Electric rules (pure functions)
-    services/         queue selection, quality reports, review queue, file ingest, audit log
+    spc.py            X-bar/R, EWMA and Cpk for continuous measurements (pure functions)
+    panel.py          panel metrics, spec limits, CIEDE2000, uniformity, gamma fit
+    services/         queue selection, quality reports, review queue, file ingest, audit log, panel line charts
     simulate.py       simulated labelers for the drift demo
+    panel_sim.py      simulated display panel line for the panel line demo
   alembic/            migrations
   tests/
 frontend/
   src/
     api.ts            typed API client
     auth.tsx          token and current-user context
-    pages/            login, projects, project admin, labeling, quality, review, audit log
-    components/       control chart, status badge, item view
+    pages/            login, projects, project admin, labeling, quality, review, audit log, panel line
+    components/       control charts (p-chart; X-bar, R and EWMA), status badge, item view
 scripts/              demo data
 Dockerfile            production image: API plus built frontend
 render.yaml           Render Blueprint
@@ -239,8 +294,9 @@ render.yaml           Render Blueprint
    kappa, p-charts with Western Electric rules, simulated labelers
 3. **Dashboards and review:** per-labeler control charts, drift alerts, reviewer queue,
    audit log viewer
-4. **Ship it** (this step): deploy on Render and Neon, demo GIF, architecture diagram,
-   design notes
+4. **Ship it:** deploy on Render and Neon, demo GIF, architecture diagram, design notes
+5. **Panel line:** variables control charts, Cpk and a simulated display panel line,
+   with optical (luminance, uniformity, ΔE2000, gamma) and TFT/electrical metrics
 
 Next, if there's time: the pairwise preference labeling UI (the upload format already
 supports it) and an LLM labeler that joins the queue as one more labeler, measured on

@@ -11,6 +11,7 @@ import type { Role } from './types'
 
 // The charting library is large, so only staff who open a dashboard download it.
 const QualityPage = lazy(() => import('./pages/QualityPage'))
+const PanelLinePage = lazy(() => import('./pages/PanelLinePage'))
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
         <Route element={<RequireRole roles={['admin', 'reviewer']} />}>
           <Route path="/projects/:projectId/quality" element={<QualityPage />} />
           <Route path="/projects/:projectId/review" element={<ReviewPage />} />
+          <Route path="/panel-line" element={<PanelLinePage />} />
         </Route>
         <Route element={<RequireRole roles={['labeler']} />}>
           <Route path="/projects/:projectId/label" element={<LabelPage />} />
@@ -47,6 +49,9 @@ function SignedInLayout() {
         <Link to="/projects" className="brand">
           Gauge
         </Link>
+        {(user.role === 'admin' || user.role === 'reviewer') && (
+          <Link to="/panel-line">Panel line</Link>
+        )}
         {user.role === 'admin' && <Link to="/audit">Audit log</Link>}
         <span className="muted">
           {user.email} · {user.role}

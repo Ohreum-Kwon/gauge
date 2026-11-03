@@ -145,3 +145,83 @@ export interface AuditPage {
   total: number
   entries: AuditEntry[]
 }
+
+export type PanelStatus = 'in_control' | 'warning' | 'out_of_control'
+
+export interface PanelMetric {
+  key: string
+  name: string
+  unit: string
+  group: 'optical' | 'electrical'
+  target: number
+  lsl: number | null
+  usl: number | null
+}
+
+export interface PanelSignal {
+  subgroup: number
+  measured_at: string
+  rule: string
+  description: string
+  severity: 'alarm' | 'warning'
+  above: boolean
+}
+
+export interface PanelSeriesSummary {
+  line: string
+  metric: string
+  status: PanelStatus
+  first_warning: PanelSignal | null
+  first_alarm: PanelSignal | null
+  signals: number
+  latest_mean: number
+  baseline_cpk: number
+  recent_cpk: number
+}
+
+export interface PanelLineSummary {
+  baseline_subgroups: number
+  lines: string[]
+  metrics: PanelMetric[]
+  series: PanelSeriesSummary[]
+}
+
+export interface Capability {
+  mean: number
+  sigma_within: number
+  sigma_overall: number
+  cp: number | null
+  cpk: number
+  pp: number | null
+  ppk: number
+}
+
+export interface PanelChartPoint {
+  subgroup: number
+  measured_at: string
+  lot: string
+  mean: number
+  range: number
+  z: number
+  ewma: number
+  ewma_ucl: number
+  ewma_lcl: number
+}
+
+export interface PanelChart {
+  line: string
+  metric: PanelMetric
+  status: PanelStatus
+  baseline_subgroups: number
+  subgroup_size: number
+  center: number
+  xbar_ucl: number
+  xbar_lcl: number
+  r_center: number
+  r_ucl: number
+  r_lcl: number
+  points: PanelChartPoint[]
+  signals: PanelSignal[]
+  baseline_capability: Capability
+  recent_capability: Capability
+}
