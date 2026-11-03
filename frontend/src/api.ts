@@ -3,6 +3,8 @@ import type {
   ControlChart,
   GoldAccuracy,
   Item,
+  PanelChart,
+  PanelLineSummary,
   Progress,
   Project,
   ProjectCreate,
@@ -115,6 +117,12 @@ export const api = {
   /** The final-label CSV, fetched with the token so it can be saved as a file. */
   exportLabels: async (projectId: number) =>
     (await send(`/projects/${projectId}/export.csv`)).blob(),
+
+  panelLine: () => request<PanelLineSummary>('/panel-line'),
+  panelChart: (line: string, metric: string) =>
+    request<PanelChart>(
+      `/panel-line/lines/${encodeURIComponent(line)}/metrics/${encodeURIComponent(metric)}`,
+    ),
 
   audit: (offset: number, action?: string) =>
     request<AuditPage>(

@@ -381,6 +381,11 @@ tr.selected {
   background: var(--status-good);
 }
 
+.status-icon.warning {
+  background: var(--status-warning);
+  color: #1a1d23;
+}
+
 .status-icon.critical {
   background: var(--status-critical);
 }
@@ -444,6 +449,61 @@ section.card,
   border: none;
   border-radius: 50%;
   background: var(--status-critical);
+}
+
+.legend .warn::before {
+  width: 0.6rem;
+  height: 0.6rem;
+  border: none;
+  border-radius: 50%;
+  background: var(--status-warning);
+}
+
+.legend .spec::before {
+  border-top: 2px dotted var(--status-critical);
+}
+
+.chart.small {
+  height: 180px;
+}
+
+.panel-grid td,
+.panel-grid th {
+  white-space: nowrap;
+}
+
+.panel-grid .cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.panel-grid td.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* On a phone, the status columns matter more than the spec; the detail card repeats it. */
+@media (max-width: 600px) {
+  .panel-grid .spec-col {
+    display: none;
+  }
+}
+
+.panel-grid .group th {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .alerts {
