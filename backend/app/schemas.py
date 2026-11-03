@@ -228,3 +228,82 @@ class AuditEntryOut(BaseModel):
 class AuditPage(BaseModel):
     total: int
     entries: list[AuditEntryOut]
+
+
+class PanelMetricOut(BaseModel):
+    key: str
+    name: str
+    unit: str
+    group: str  # "optical" or "electrical"
+    target: float
+    lsl: float | None
+    usl: float | None
+
+
+class CapabilityOut(BaseModel):
+    mean: float
+    sigma_within: float
+    sigma_overall: float
+    cp: float | None  # None for a one-sided spec
+    cpk: float
+    pp: float | None
+    ppk: float
+
+
+class PanelSignalOut(BaseModel):
+    subgroup: int
+    measured_at: datetime
+    rule: str
+    description: str
+    severity: str  # "alarm" (stop and investigate) or "warning"
+    # True when the value is high (above the center line), False when low.
+    above: bool
+
+
+class PanelSeriesSummary(BaseModel):
+    line: str
+    metric: str
+    status: str  # "in_control", "warning" or "out_of_control"
+    first_warning: PanelSignalOut | None  # after the baseline
+    first_alarm: PanelSignalOut | None
+    signals: int  # after the baseline
+    latest_mean: float
+    baseline_cpk: float
+    recent_cpk: float
+
+
+class PanelLineSummary(BaseModel):
+    baseline_subgroups: int
+    lines: list[str]
+    metrics: list[PanelMetricOut]
+    series: list[PanelSeriesSummary]
+
+
+class PanelChartPointOut(BaseModel):
+    subgroup: int
+    measured_at: datetime
+    lot: str
+    mean: float
+    range: float
+    z: float
+    ewma: float
+    ewma_ucl: float
+    ewma_lcl: float
+
+
+class PanelChart(BaseModel):
+    line: str
+    metric: PanelMetricOut
+    status: str
+    baseline_subgroups: int
+    subgroup_size: int
+    center: float
+    xbar_ucl: float
+    xbar_lcl: float
+    r_center: float
+    r_ucl: float
+    r_lcl: float
+    points: list[PanelChartPointOut]
+    signals: list[PanelSignalOut]
+    baseline_capability: CapabilityOut
+    recent_capability: CapabilityOut
