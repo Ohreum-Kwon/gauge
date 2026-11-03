@@ -145,3 +145,24 @@ class Resolution(SQLModel, table=True):
     reviewer_id: int | None = Field(default=None, foreign_key="users.id", ondelete="SET NULL")
     note: str | None = Field(default=None, max_length=1000)
     created_at: datetime = created_at_field()
+
+
+class PanelMeasurement(SQLModel, table=True):
+    """One end-of-line test reading for one display panel. `metric` is a key of
+    `app.panel.METRICS`, where its unit and spec limits are defined.
+
+    Panels tested in the same sampling period on the same line form a subgroup, the unit
+    the X-bar/R and EWMA charts plot.
+    """
+
+    __tablename__ = "panel_measurements"
+    __table_args__ = (Index("ix_panel_measurements_line_metric", "line", "metric", "subgroup"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    line: str = Field(max_length=50)  # production line, e.g. "L1"
+    lot: str = Field(max_length=50)  # TFT backplane lot the panel was built from
+    panel_serial: str = Field(max_length=50, index=True)
+    subgroup: int = Field(ge=0)  # sampling period, counted from the start of the run
+    metric: str = Field(max_length=50)
+    value: float
+    measured_at: datetime = created_at_field()
