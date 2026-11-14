@@ -4,6 +4,7 @@ import { useAuth } from './auth'
 import AuditPage from './pages/AuditPage'
 import LabelPage from './pages/LabelPage'
 import LandingPage from './pages/LandingPage'
+import LivePage from './pages/LivePage'
 import LoginPage from './pages/LoginPage'
 import ProjectPage from './pages/ProjectPage'
 import ProjectsPage from './pages/ProjectsPage'
@@ -18,6 +19,7 @@ export default function App() {
   return (
     <Routes>
       <Route index element={<LandingPage />} />
+      <Route path="/live" element={<LivePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route element={<SignedInLayout />}>
         <Route path="/projects" element={<ProjectsPage />} />

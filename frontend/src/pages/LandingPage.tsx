@@ -84,6 +84,12 @@ export default function LandingPage() {
             a production line: hidden gold questions, agreement between labelers, and a control
             chart for every person.
           </p>
+          <div className="hero-actions">
+            <Link to="/live" className="button">
+              Break it yourself, live →
+            </Link>
+            <span className="muted">Inject a fault and watch Gauge catch it.</span>
+          </div>
         </div>
         <DriftIllustration />
       </section>
