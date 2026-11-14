@@ -3,6 +3,7 @@ import { Link, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth'
 import AuditPage from './pages/AuditPage'
 import LabelPage from './pages/LabelPage'
+import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import ProjectPage from './pages/ProjectPage'
 import ProjectsPage from './pages/ProjectsPage'
@@ -16,9 +17,9 @@ const PanelLinePage = lazy(() => import('./pages/PanelLinePage'))
 export default function App() {
   return (
     <Routes>
+      <Route index element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route element={<SignedInLayout />}>
-        <Route index element={<Navigate to="/projects" replace />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route element={<RequireRole roles={['admin']} />}>
           <Route path="/projects/:projectId" element={<ProjectPage />} />

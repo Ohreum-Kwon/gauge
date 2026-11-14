@@ -582,3 +582,205 @@ section.card,
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* Landing page */
+.landing {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+}
+
+.landing-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1rem 0;
+}
+
+.landing-nav .brand {
+  font-weight: 700;
+  font-size: 1.125rem;
+  margin-right: auto;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 2.5rem;
+  align-items: center;
+  padding: 2.5rem 0 3rem;
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 4.5vw, 3rem);
+  letter-spacing: -0.02em;
+}
+
+.lede {
+  font-size: 1.125rem;
+  color: var(--muted);
+  max-width: 34rem;
+}
+
+.landing h2 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.tours {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+button.tour {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: left;
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--surface);
+  padding: 1.25rem;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+
+button.tour:hover:not(:disabled) {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.tour-go {
+  margin-top: auto;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.how {
+  margin-top: 3rem;
+}
+
+.steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.landing-foot {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 760px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding-top: 1rem;
+  }
+}
+
+/* The drift illustration: the line draws in, points appear, day 6 turns red. */
+.drift {
+  margin: 0;
+}
+
+.drift svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.drift .grid {
+  stroke: var(--chart-grid);
+}
+
+.drift .tick {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.drift .target {
+  stroke: var(--chart-limit);
+}
+
+.drift .limit {
+  stroke: var(--chart-limit);
+  stroke-dasharray: 5 4;
+}
+
+.drift .limit-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.drift .series {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-width: 2.5;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: drift-draw 1.75s ease-in-out 0.25s forwards;
+}
+
+.drift .point {
+  fill: var(--series-1);
+  opacity: 0;
+  animation: drift-pop 0.3s ease-out forwards;
+}
+
+.drift .point.alarm {
+  fill: var(--status-critical);
+}
+
+.drift .callout {
+  opacity: 0;
+  animation: drift-pop 0.4s ease-out forwards;
+}
+
+.drift .callout rect {
+  fill: var(--status-critical);
+}
+
+.drift .callout text {
+  fill: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.drift figcaption {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+@keyframes drift-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes drift-pop {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drift .series,
+  .drift .point,
+  .drift .callout {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}

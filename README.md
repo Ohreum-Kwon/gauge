@@ -16,9 +16,11 @@ Gauge also runs the same statistics on a **display panel production line**: simu
 end-of-line test data for color, luminance and uniformity, and for TFT backplane
 electricals, on X̄/R and EWMA charts with Cpk. See [Panel line](#panel-line).
 
-**Try it:** [the live demo](https://gauge-w270.onrender.com) runs on Render's free tier, so the first request after a
-quiet spell takes about a minute while the server wakes up. Sign in with one of the
-demo accounts on the login page.
+**Try it:** [the live demo](https://gauge-w270.onrender.com) opens on a landing page with
+one-click tours: catch the drifting labeler, watch a display line drift, or label images
+yourself. No sign-up. It runs on Render's free tier; a scheduled ping
+([`keep-awake.yml`](.github/workflows/keep-awake.yml)) keeps it from going to sleep, so it
+should open in seconds rather than after a minute's cold start.
 
 ## Stack
 
@@ -97,7 +99,7 @@ With Docker:
 docker compose up --build
 ```
 
-Open http://localhost:5173 and pick a demo account. The API docs are at
+Open http://localhost:5173 and pick a tour or a demo account. The API docs are at
 http://localhost:8000/api/docs.
 
 Without Docker (needs Postgres running locally, plus [uv](https://docs.astral.sh/uv/)

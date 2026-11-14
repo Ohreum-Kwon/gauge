@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import ControlChartView from '../components/ControlChartView'
@@ -20,6 +20,8 @@ export default function QualityPage() {
     queryFn: () => api.quality(projectId),
   })
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  // The landing page links here with ?labeler=<email> to open on one labeler's chart.
+  const focusEmail = useSearchParams()[0].get('labeler')
 
   if (quality.isPending) return <p className="muted">Loading…</p>
   if (quality.error) return <p className="error">{quality.error.message}</p>
@@ -28,6 +30,7 @@ export default function QualityPage() {
   // Until someone picks a row, show the labeler most in need of attention.
   const selected =
     labelers.find((l) => l.user_id === selectedId) ??
+    labelers.find((l) => l.email === focusEmail) ??
     labelers.find((l) => l.status === 'out_of_control') ??
     labelers[0]
 
