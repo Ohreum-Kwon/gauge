@@ -79,6 +79,11 @@ would change).
   scripted labelers calling the same queue and label services as people do, so the
   dashboards are exercised end to end, and a slow CI test checks the drifter is caught
   on day 6.
+- **Live demo sessions in memory, not in Postgres.** Each visitor's stream is its own
+  `LiveDemo` object, so one person's faults never reach another's screen, and the free
+  database can sleep while people watch. Sessions are capped and end after ten minutes.
+  This only works with one instance; with more, fault requests would need sticky routing
+  or a shared channel such as Redis pub/sub.
 - **One container, one origin.** In production FastAPI also serves the built frontend.
   That means one free Render service, no CORS, and no API URL to wire between services.
   In development Vite serves the frontend and proxies `/api`.
@@ -215,6 +220,27 @@ documents this, and its tests pin the seed.
 The variables-chart math (`backend/app/spc.py`) and the colorimetry (`backend/app/panel.py`)
 are pure functions, tested against hand-worked examples and Sharma, Wu and Dalal's
 CIEDE2000 reference pairs.
+
+## Live demo
+
+`GET /api/live/stream` starts a private, live version of both stories and streams it
+over server-sent events: three labelers answering gold questions and one panel line
+testing five panels per subgroup, a sample a second. `POST /api/live/{id}/faults`
+injects a fault into that stream:
+
+| Fault | Target | What changes | Typically caught after |
+|---|---|---|---|
+| `drift` | a labeler | Accuracy slides 3 points per sample from ~95% to 60% | 7 samples (2-of-3 beyond 2σ, or 3σ) |
+| `rush` | a labeler | Clicks the first of ten options | 1 sample |
+| `backlight` | a line | Backlight ageing, as in the panel line week | 11 samples (the EWMA warns first) |
+| `tft_lot` | a line | Eight subgroups from a lot with Vth 0.06 V high | 1 sample |
+
+The demo knows which faults are active, so it grades its own detectors. An alarm on a
+chart with a fault is reported as a detection with its delay in samples; an alarm on a
+healthy chart is reported as a **false alarm**. Those happen: each panel chart crosses
+3σ by chance about once in 370 points, so a few minutes of watching will usually show
+one, and the demo labels it rather than hiding it. Delays above are medians over 200
+seeds; `backend/app/live.py` has the model and `tests/test_live.py` pins the behavior.
 
 ## Deploy
 

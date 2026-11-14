@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     frontend_dist: Path | None = None
     # Largest item upload accepted, in bytes.
     max_upload_bytes: int = 5 * 1024 * 1024
+    # Live demo: seconds between samples, how many visitors can watch at once, and how
+    # many samples one visit streams before it stops.
+    live_seconds_per_sample: float = 1.0
+    live_max_sessions: int = 40
+    live_max_samples: int = 600
 
     @model_validator(mode="after")
     def _require_real_secret_in_production(self) -> "Settings":
