@@ -105,9 +105,17 @@ def simulate(session: Session, reset: bool = False, seed: int = 1611) -> int:
 
 
 def measure_panel(line: str, lot: str, subgroup: int, rng: random.Random) -> dict[str, float]:
-    """One panel's test results, from simulated raw readings."""
-    # Optical. Each panel's backlight differs a little; each zone reading adds meter noise.
+    """One panel's test results on the demo week's schedule of problems."""
     aged = max(0, subgroup - AGING_STARTS) if line == AGING_LINE else 0
+    shifted = line == SHIFTED_LINE and lot == SHIFTED_LOT
+    return panel_readings(rng, aged=aged, shifted=shifted)
+
+
+def panel_readings(rng: random.Random, *, aged: int = 0, shifted: bool = False) -> dict[str, float]:
+    """One panel's test results, from simulated raw readings. `aged` is how many subgroups
+    the backlight has been ageing for; `shifted` means the panel's TFTs come from a lot
+    with high threshold voltage. The live demo calls this directly."""
+    # Optical. Each panel's backlight differs a little; each zone reading adds meter noise.
     brightness = 350 * rng.gauss(1, 0.012) * (1 - AGING_PER_SUBGROUP * aged)
     zones = []
     for profile in ZONE_PROFILE:
@@ -126,7 +134,6 @@ def measure_panel(line: str, lot: str, subgroup: int, rng: random.Random) -> dic
     ramp[0], ramp[-1] = black, white
 
     # Electrical. A shifted lot's TFTs switch on later and conduct less.
-    shifted = line == SHIFTED_LINE and lot == SHIFTED_LOT
     vth = rng.gauss(1.0, 0.03) + (VTH_SHIFT if shifted else 0)
     ion = rng.gauss(15, 0.6) * (ION_FACTOR if shifted else 1)  # µA
     ioff = rng.lognormvariate(math.log(0.08), 0.25)  # pA

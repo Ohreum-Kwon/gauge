@@ -582,3 +582,397 @@ section.card,
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* Landing page */
+.landing {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+}
+
+.landing-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1rem 0;
+}
+
+.landing-nav .brand {
+  font-weight: 700;
+  font-size: 1.125rem;
+  margin-right: auto;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 2.5rem;
+  align-items: center;
+  padding: 2.5rem 0 3rem;
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 4.5vw, 3rem);
+  letter-spacing: -0.02em;
+}
+
+.lede {
+  font-size: 1.125rem;
+  color: var(--muted);
+  max-width: 34rem;
+}
+
+.landing h2 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.tours {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+button.tour {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: left;
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--surface);
+  padding: 1.25rem;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+
+button.tour:hover:not(:disabled) {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.tour-go {
+  margin-top: auto;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.how {
+  margin-top: 3rem;
+}
+
+.steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.landing-foot {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 760px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding-top: 1rem;
+  }
+}
+
+/* The drift illustration: the line draws in, points appear, day 6 turns red. */
+.drift {
+  margin: 0;
+}
+
+.drift svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.drift .grid {
+  stroke: var(--chart-grid);
+}
+
+.drift .tick {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.drift .target {
+  stroke: var(--chart-limit);
+}
+
+.drift .limit {
+  stroke: var(--chart-limit);
+  stroke-dasharray: 5 4;
+}
+
+.drift .limit-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.drift .series {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-width: 2.5;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: drift-draw 1.75s ease-in-out 0.25s forwards;
+}
+
+.drift .point {
+  fill: var(--series-1);
+  opacity: 0;
+  animation: drift-pop 0.3s ease-out forwards;
+}
+
+.drift .point.alarm {
+  fill: var(--status-critical);
+}
+
+.drift .callout {
+  opacity: 0;
+  animation: drift-pop 0.4s ease-out forwards;
+}
+
+.drift .callout rect {
+  fill: var(--status-critical);
+}
+
+.drift .callout text {
+  fill: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.drift figcaption {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+@keyframes drift-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes drift-pop {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drift .series,
+  .drift .point,
+  .drift .callout {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Live demo */
+.server-status {
+  font-size: 0.9375rem;
+  margin: 0.5rem 0;
+}
+
+.server-status.ready {
+  color: var(--success);
+}
+
+.server-status.waking {
+  color: var(--gold);
+}
+
+.server-status.down {
+  color: var(--error);
+}
+
+.live-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  padding: 1rem 0 1.25rem;
+}
+
+.live-head h1 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+}
+
+.live-score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.live-score button {
+  margin-left: auto;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+@media (max-width: 860px) {
+  .live-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.live-grid h2 {
+  margin: 0 0 0.25rem;
+}
+
+.live-grid > section > p,
+.live-grid > section > div > p {
+  margin-top: 0;
+  font-size: 0.9375rem;
+}
+
+.live-chart {
+  margin: 0;
+  padding: 0.75rem 0.75rem 0.25rem;
+  transition: border-color 0.2s;
+}
+
+.live-chart.alarming {
+  border-color: var(--status-critical);
+}
+
+.live-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.live-tick {
+  fill: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-center {
+  stroke: var(--chart-limit);
+}
+
+.live-limit {
+  stroke: var(--chart-limit);
+  stroke-dasharray: 4 3;
+}
+
+.live-baseline {
+  fill: var(--chart-grid);
+  opacity: 0.6;
+}
+
+.live-fault {
+  fill: var(--status-critical);
+  opacity: 0.08;
+}
+
+.live-series {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-width: 1.5;
+}
+
+.live-point {
+  fill: var(--series-1);
+}
+
+.live-point.warning {
+  fill: var(--status-warning);
+}
+
+.live-point.alarm {
+  fill: var(--status-critical);
+}
+
+.live-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.live-actions button {
+  font-size: 0.875rem;
+  padding: 0.3rem 0.75rem;
+}
+
+.live-log {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  font-size: 0.9375rem;
+}
+
+.live-log li {
+  padding: 0.4rem 0 0.4rem 0.75rem;
+  border-left: 3px solid var(--border);
+  margin-bottom: 0.25rem;
+}
+
+.live-log .tone-fault {
+  border-left-color: var(--status-warning);
+}
+
+.live-log .tone-caught {
+  border-left-color: var(--status-good);
+}
+
+.live-log .tone-false {
+  border-left-color: var(--status-critical);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.hero-actions .button {
+  font-weight: 600;
+  padding: 0.65rem 1.25rem;
+}
+
+a.brand {
+  color: var(--text);
+  text-decoration: none;
+}

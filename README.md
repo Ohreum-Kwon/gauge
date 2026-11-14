@@ -16,9 +16,14 @@ Gauge also runs the same statistics on a **display panel production line**: simu
 end-of-line test data for color, luminance and uniformity, and for TFT backplane
 electricals, on X̄/R and EWMA charts with Cpk. See [Panel line](#panel-line).
 
-**Try it:** [the live demo](https://gauge-w270.onrender.com) runs on Render's free tier, so the first request after a
-quiet spell takes about a minute while the server wakes up. Sign in with one of the
-demo accounts on the login page.
+**Try it:** [the live demo](https://gauge-w270.onrender.com) opens on a landing page. **[Break it
+yourself](https://gauge-w270.onrender.com/live)** streams a private, live copy of Gauge
+where you inject faults (a drifting labeler, a rushing one, an ageing backlight, a bad TFT
+lot) and watch the control charts catch them, with the detection delay and any false
+alarms counted. The landing page also has one-click tours: catch the drifting labeler,
+watch a display line drift, or label images yourself. No sign-up. It runs on Render's free tier; a scheduled ping
+([`keep-awake.yml`](.github/workflows/keep-awake.yml)) keeps it from going to sleep, so it
+should open in seconds rather than after a minute's cold start.
 
 ## Stack
 
@@ -77,6 +82,11 @@ would change).
   scripted labelers calling the same queue and label services as people do, so the
   dashboards are exercised end to end, and a slow CI test checks the drifter is caught
   on day 6.
+- **Live demo sessions in memory, not in Postgres.** Each visitor's stream is its own
+  `LiveDemo` object, so one person's faults never reach another's screen, and the free
+  database can sleep while people watch. Sessions are capped and end after ten minutes.
+  This only works with one instance; with more, fault requests would need sticky routing
+  or a shared channel such as Redis pub/sub.
 - **One container, one origin.** In production FastAPI also serves the built frontend.
   That means one free Render service, no CORS, and no API URL to wire between services.
   In development Vite serves the frontend and proxies `/api`.
@@ -97,7 +107,7 @@ With Docker:
 docker compose up --build
 ```
 
-Open http://localhost:5173 and pick a demo account. The API docs are at
+Open http://localhost:5173 and pick a tour or a demo account. The API docs are at
 http://localhost:8000/api/docs.
 
 Without Docker (needs Postgres running locally, plus [uv](https://docs.astral.sh/uv/)
@@ -213,6 +223,30 @@ documents this, and its tests pin the seed.
 The variables-chart math (`backend/app/spc.py`) and the colorimetry (`backend/app/panel.py`)
 are pure functions, tested against hand-worked examples and Sharma, Wu and Dalal's
 CIEDE2000 reference pairs.
+
+## Live demo
+
+![Break it yourself: Blake was made to rush and was caught after one sample; Avery's drift was caught after eight; L1's ageing backlight is raising EWMA warnings.](docs/live.png)
+
+The [Break it yourself](https://gauge-w270.onrender.com/live) page runs on two endpoints.
+`GET /api/live/stream` starts a private, live version of both stories and streams it
+over server-sent events: three labelers answering gold questions and one panel line
+testing five panels per subgroup, a sample a second. `POST /api/live/{id}/faults`
+injects a fault into that stream:
+
+| Fault | Target | What changes | Typically caught after (median) |
+|---|---|---|---|
+| `drift` | a labeler | Accuracy slides 3 points per sample from ~95% to 60% | 7 samples (2-of-3 beyond 2σ, or 3σ) |
+| `rush` | a labeler | Clicks the first of ten options | 1 sample |
+| `backlight` | a line | Backlight ageing, as in the panel line week | 11 samples (the EWMA warns first) |
+| `tft_lot` | a line | Eight subgroups from a lot with Vth 0.06 V high | 1 sample |
+
+The demo knows which faults are active, so it grades its own detectors. An alarm on a
+chart with a fault is reported as a detection with its delay in samples; an alarm on a
+healthy chart is reported as a **false alarm**. Those happen: each panel chart crosses
+3σ by chance about once in 370 points, so a few minutes of watching will usually show
+one, and the demo labels it rather than hiding it. Delays above are medians over 200
+seeds; `backend/app/live.py` has the model and `tests/test_live.py` pins the behavior.
 
 ## Deploy
 

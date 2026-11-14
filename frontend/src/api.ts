@@ -67,6 +67,9 @@ async function errorMessage(response: Response): Promise<string> {
 const json = (body: unknown) => JSON.stringify(body)
 
 export const api = {
+  baseUrl: BASE_URL,
+  liveFault: (sessionId: string, body: { fault: string; target?: string }) =>
+    request<void>(`/live/${sessionId}/faults`, { method: 'POST', body: json(body) }),
   login: (email: string, password: string) =>
     request<{ access_token: string }>('/auth/login', {
       method: 'POST',

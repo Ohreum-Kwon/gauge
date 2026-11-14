@@ -1,0 +1,20 @@
+# Render's free tier puts the demo to sleep after 15 minutes without traffic, and the
+# first visitor then waits about a minute. A request every 10 minutes keeps it awake.
+# One always-on service uses about 744 of the 750 free instance hours in a 31-day month.
+# /api/health doesn't touch the database, so Neon still suspends between real visits.
+# GitHub pauses scheduled workflows in repositories with no commits for 60 days;
+# re-enable it from the Actions tab if that happens.
+name: Keep demo awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping the live demo
+        run: curl -fsS --retry 3 --retry-delay 20 --max-time 90 https://gauge-w270.onrender.com/api/health
