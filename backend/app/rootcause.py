@@ -3,11 +3,11 @@
 When a Western Electric rule fires, the useful next question is "what changed?". This
 module answers it with plain arithmetic, so every ranking can be checked by hand:
 
-1. **The shift.** The alert's run is the stretch of consecutive points above the center
-   line that ends at the alert. Points before it are the baseline. The shift's *extra
-   errors* are the errors in the run minus what the baseline rate predicts for it. When
-   there's too little baseline (a labeler bad from day one), the run is compared with the
-   chart's center line instead.
+1. **The shift.** The alert's run starts where a CUSUM change-point estimate puts the
+   start of the shift that ends at the alert (see `run_start`). Points before it are the
+   baseline. The shift's *extra errors* are the errors in the run minus what the
+   baseline rate predicts for it. When there's too little baseline (a labeler bad from
+   day one), the run is compared with the chart's center line instead.
 2. **Candidates.** Each kind of cause gets a score from 0 to 1:
    - *A change at the onset* (a model update, a guideline edit, a new batch): the share
      of the extra errors that came after it, if it happened within two days before the
@@ -19,7 +19,7 @@ module answers it with plain arithmetic, so every ranking can be checked by hand
      of values holds and the share of answers it makes up. "3 classes hold 90% of the
      extra errors but 30% of the answers" scores 0.6. Errors spread evenly score ~0.
      Since the set is picked to look as bad as possible, it must also beat the rest of
-     the run by a z of 3, and cover at most half the answers.
+     the run by a z of 3.5, and cover at most half the answers.
 3. Candidates that clear a minimum score and a significance check (z of 2 or more) are
    ranked, each with a one-line explanation.
 
@@ -29,10 +29,14 @@ Pure functions with no database access, like `stats.py`.
 import math
 import statistics
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
+
+# A chart's subgroup: a calendar day on the labeler charts, a sample number in the live
+# demo.
+Period = date | int
 
 # Fewer baseline answers than this, and the run is compared with the center line.
 MIN_BASELINE = 30
@@ -47,7 +51,7 @@ MIN_SCORE = 0.15
 MIN_Z = 2.0
 # A concentration must also stand out from the rest of the run by this much, since the
 # set of values is chosen to look as bad as possible.
-MIN_CONTRAST_Z = 3.0
+MIN_CONTRAST_Z = 3.5
 # A "concentration" covering more than this share of the answers isn't one.
 MAX_CONCENTRATION_SHARE = 0.5
 MAX_CAUSES = 5
@@ -71,10 +75,11 @@ class Observation:
     at: datetime
     defect: bool
     dims: dict[str, str] = field(default_factory=dict)
+    period: int | None = None  # set when subgroups aren't calendar days
 
     @property
-    def day(self) -> date:
-        return self.at.date()
+    def day(self) -> Period:
+        return self.at.date() if self.period is None else self.period
 
 
 @dataclass(frozen=True)
@@ -82,6 +87,22 @@ class Event:
     kind: str
     description: str
     occurred_at: datetime
+    period: int | None = None  # as on Observation
+
+    @property
+    def day(self) -> Period:
+        return self.occurred_at.date() if self.period is None else self.period
+
+
+def _periods_between(a: Period, b: Period) -> int:
+    """b - a, in subgroups."""
+    if isinstance(a, date) and isinstance(b, date):
+        return (b - a).days
+    return int(b) - int(a)  # type: ignore[arg-type]
+
+
+def _short_day(period: Period) -> str:
+    return f"on {period:%b %-d}" if isinstance(period, date) else f"at {period}"
 
 
 @dataclass(frozen=True)
@@ -96,8 +117,8 @@ class Cause:
 
 @dataclass(frozen=True)
 class Analysis:
-    run_start: date
-    alert_day: date
+    run_start: Period
+    alert_day: Period
     compared_with: str  # "baseline" or "center"
     run_answers: int
     run_rate: float
@@ -126,29 +147,44 @@ def _pct(x: float) -> str:
     return f"{x:.0%}"
 
 
-def run_start(days: Sequence[date], z: Sequence[float], alert_day: date) -> date:
-    """First day of the run of points above center that ends at the alert."""
-    i = list(days).index(alert_day)
-    while i > 0 and z[i - 1] > 0:
-        i -= 1
-    return days[i]
+# A point counts toward the shift when it is more than this many sigmas above center
+# (the CUSUM reference value, k = 0.5 for a 1-sigma shift).
+CUSUM_K = 0.5
+
+
+def run_start(days: Sequence[Period], z: Sequence[float], alert_day: Period) -> Period:
+    """Where the shift that ends at the alert most likely began: the point i that
+    maximizes sum(z[j] - k for j in i..alert), the change-point estimate behind an
+    upper CUSUM. One unlucky low point inside a shift doesn't cut it short (and hide
+    the change that started it), and a noisy high point just before it isn't pulled in.
+    """
+    end = list(days).index(alert_day)
+    best, best_i, total = float("-inf"), end, 0.0
+    for i in range(end, -1, -1):
+        total += z[i] - CUSUM_K
+        if total > best:
+            best, best_i = total, i
+    return days[best_i]
 
 
 def analyze(
     obs: Sequence[Observation],
-    days: Sequence[date],
+    days: Sequence[Period],
     z: Sequence[float],
-    alert_day: date,
+    alert_day: Period,
     center: float,
     events: Sequence[Event] = (),
     peers: dict[str, Sequence[Observation]] | None = None,
     dimensions: dict[str, str] | None = None,
     subject: str = "this labeler",
+    unit: str = "day",
+    when: Callable[[Period], str] = _short_day,
 ) -> Analysis:
     """Rank causes for the alert on `alert_day` of a chart with points `days` and
     z-scores `z`. `peers` maps each other labeler to their observations (None skips
     the "this labeler alone" check), and `dimensions` maps each dimension key in
-    `Observation.dims` to a readable name."""
+    `Observation.dims` to a readable name. `unit` names a subgroup ("day", "sample")
+    and `when` phrases one ("on Nov 3", "at sample 40") in explanations."""
     start = run_start(days, z, alert_day)
     run = [o for o in obs if start <= o.day <= alert_day]
     before = [o for o in obs if o.day < start]
@@ -159,11 +195,11 @@ def analyze(
     causes: list[Cause] = []
     if run and extra > 0:
         for event in events:
-            cause = _event_cause(event, obs, run, start, alert_day, expected)
+            cause = _event_cause(event, obs, run, start, alert_day, expected, unit, when)
             if cause:
                 causes.append(cause)
         if peers is not None:
-            cause = _labeler_cause(run, before, peers, start, alert_day, center, subject)
+            cause = _labeler_cause(run, before, peers, start, alert_day, center, subject, unit)
             if cause:
                 causes.append(cause)
         for key, name in (dimensions or {}).items():
@@ -189,14 +225,16 @@ def _event_cause(
     event: Event,
     obs: Sequence[Observation],
     run: Sequence[Observation],
-    start: date,
-    alert_day: date,
+    start: Period,
+    alert_day: Period,
     expected: float,
+    unit: str,
+    when: Callable[[Period], str],
 ) -> Cause | None:
-    lead = (start - event.occurred_at.date()).days
-    if lead > EVENT_LEAD_DAYS or event.occurred_at.date() > alert_day:
+    lead = _periods_between(event.day, start)
+    if lead > EVENT_LEAD_DAYS or _periods_between(alert_day, event.day) > 0:
         return None
-    before = [o for o in obs if o.at < event.occurred_at and o.day <= alert_day]
+    before = [o for o in obs if o.at < event.occurred_at]
     after = [o for o in obs if o.at >= event.occurred_at and o.day <= alert_day]
     if not before or not after:
         return None
@@ -208,16 +246,17 @@ def _event_cause(
     extra_after = sum(o.defect for o in run_after) - len(run_after) * expected
     share = min(1.0, max(0.0, extra_after / extra_total))
 
-    when = event.occurred_at.date()
-    if lead <= 0:
-        timing = "the day the shift began" if lead == 0 else f"{-lead} day(s) into the shift"
+    if lead == 0:
+        timing = f"the {unit} the shift began"
+    elif lead < 0:
+        timing = f"{-lead} {unit}{'s' if lead < -1 else ''} into the shift"
     else:
-        timing = f"{lead} day(s) before the shift began"
+        timing = f"{lead} {unit}{'s' if lead > 1 else ''} before the shift began"
     return Cause(
         kind=CauseKind.event,
         title=event.description,
         explanation=(
-            f"Happened on {when:%b %-d}, {timing}. Rate {_pct(rate_before)} before it, "
+            f"Happened {when(event.day)}, {timing}. Rate {_pct(rate_before)} before it, "
             f"{_pct(rate_after)} after."
         ),
         score=share,
@@ -235,10 +274,11 @@ def _labeler_cause(
     run: Sequence[Observation],
     before: Sequence[Observation],
     peers: dict[str, Sequence[Observation]],
-    start: date,
-    alert_day: date,
+    start: Period,
+    alert_day: Period,
     center: float,
     subject: str,
+    unit: str,
 ) -> Cause | None:
     """Compare with the typical other labeler (the median), so one very bad peer
     doesn't make everyone else look worse than they are."""
@@ -267,7 +307,7 @@ def _labeler_cause(
             title=f"Only {subject} changed",
             explanation=(
                 f"{subject} went from {_pct(rate_before)} to {_pct(rate_run)}. The typical "
-                f"other labeler changed by {peer_change:+.0%} over the same days."
+                f"other labeler changed by {peer_change:+.0%} over the same {unit}s."
             ),
             score=score,
             evidence={
@@ -286,7 +326,7 @@ def _labeler_cause(
         kind=CauseKind.labeler,
         title=f"{subject} is worse than the others",
         explanation=(
-            f"{subject} is at {_pct(rate_run)} on these days; the typical other labeler is "
+            f"{subject} is at {_pct(rate_run)} on these {unit}s; the typical other labeler is "
             f"at {_pct(peer_run)} (target {_pct(center)})."
         ),
         score=min(1.0, max(0.0, (rate_run - max(peer_run, center)) / gap)),

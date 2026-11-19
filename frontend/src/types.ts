@@ -89,6 +89,9 @@ export interface LabelerQuality {
   fast_share: number | null
   status: LabelerStatus
   latest_alert: Alert | null
+  /** A model labeler (LLM judge) running in shadow mode. */
+  is_model: boolean
+  model_version: string | null
 }
 
 export interface ProjectQuality {
@@ -109,6 +112,7 @@ export interface ChartPoint {
   error_rate: number
   ucl: number
   lcl: number
+  model_version?: string | null
 }
 
 export interface ControlChart {
@@ -116,6 +120,45 @@ export interface ControlChart {
   center: number
   points: ChartPoint[]
   alerts: Alert[]
+}
+
+export interface JudgeAgreementChart {
+  user_id: number
+  center: number
+  baseline_days: number
+  reference_user_ids: number[]
+  points: {
+    day: string
+    compared: number
+    disagreements: number
+    disagreement_rate: number
+    ucl: number
+    lcl: number
+    model_version: string | null
+  }[]
+  alerts: Alert[]
+}
+
+export type ChartKind = 'gold' | 'agreement'
+
+export interface Cause {
+  kind: 'event' | 'labeler' | 'concentration'
+  title: string
+  explanation: string
+  score: number
+}
+
+export interface RootCause {
+  user_id: number
+  chart: ChartKind
+  alert_day: string
+  run_start: string
+  compared_with: 'baseline' | 'center'
+  run_answers: number
+  run_rate: number
+  expected_rate: number
+  extra_errors: number
+  causes: Cause[]
 }
 
 export interface ReviewItem {

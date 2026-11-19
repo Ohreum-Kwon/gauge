@@ -976,3 +976,88 @@ a.brand {
   color: var(--text);
   text-decoration: none;
 }
+
+/* Root cause: ranked causes of an alert. */
+.causes {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.causes li {
+  margin-bottom: 0.6rem;
+}
+
+.causes li p {
+  margin: 0.15rem 0 0;
+  font-size: 0.9375rem;
+}
+
+.causes.compact {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.causes.compact li {
+  margin-bottom: 0.25rem;
+}
+
+.cause-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+}
+
+.cause-head .tag {
+  margin-right: 0;
+}
+
+.cause-score {
+  display: inline-block;
+  width: 56px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--chart-grid);
+  overflow: hidden;
+}
+
+.cause-score span {
+  display: block;
+  height: 100%;
+  background: var(--series-1);
+}
+
+.causes-none {
+  margin: 0.5rem 0 0;
+  font-size: 0.9375rem;
+}
+
+.why {
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.why h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.alerts li {
+  margin-bottom: 0.4rem;
+}
+
+.alerts button.link {
+  margin-left: 0.5rem;
+}
+
+.model-tag {
+  margin-left: 0.4rem;
+  vertical-align: 1px;
+}
+
+.legend .version::before {
+  border-top: 2px dotted var(--gold);
+}

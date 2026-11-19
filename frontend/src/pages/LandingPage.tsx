@@ -8,6 +8,7 @@ const DEMO_PASSWORD = 'gauge-demo'
 // Created by `python -m app.simulate`; the landing page opens its quality dashboard.
 const DRIFT_PROJECT = 'Simulated labelers (drift demo)'
 const DRIFTER = 'sim-drifter@gauge.dev'
+const JUDGE = 'sim-judge@gauge.dev'
 const REPO = 'https://github.com/Ohreum-Kwon/gauge'
 
 interface Tour {
@@ -19,10 +20,11 @@ interface Tour {
   destination: () => Promise<string>
 }
 
-async function driftDashboard(): Promise<string> {
+/** The simulated week's quality dashboard, opened on one labeler's chart. */
+const driftDashboard = (email: string) => async (): Promise<string> => {
   const project = (await api.projects()).find((p) => p.name === DRIFT_PROJECT)
   return project
-    ? `/projects/${project.id}/quality?labeler=${encodeURIComponent(DRIFTER)}`
+    ? `/projects/${project.id}/quality?labeler=${encodeURIComponent(email)}`
     : '/projects'
 }
 
@@ -32,7 +34,14 @@ const TOURS: Tour[] = [
     title: 'Catch a drifting labeler',
     body: 'A simulated labeler is 95% accurate for five days, then 60%. See the control chart flag them on day 6.',
     email: 'reviewer@gauge.dev',
-    destination: driftDashboard,
+    destination: driftDashboard(DRIFTER),
+  },
+  {
+    key: 'judge',
+    title: 'Catch an LLM judge after a model update',
+    body: 'An LLM labels alongside the people. A quiet v2 update breaks three classes; see it flagged on day 6 and traced back to the update.',
+    email: 'reviewer@gauge.dev',
+    destination: driftDashboard(JUDGE),
   },
   {
     key: 'panel',
@@ -135,6 +144,13 @@ export default function LandingPage() {
               Each labeler's daily error rate goes on a p-chart with 3σ limits around the project's
               target. The Western Electric rules flag a drift, a jump, or someone who was never
               good.
+            </span>
+          </li>
+          <li className="card">
+            <strong>Explain</strong>
+            <span className="muted">
+              When an alert fires, Gauge ranks likely causes: a model update or guideline change
+              right at the onset, one labeler alone, or errors piled up in a class, batch or shift.
             </span>
           </li>
           <li className="card">

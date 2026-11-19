@@ -3,7 +3,15 @@ import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { api } from './api'
 
 export type Signal = 'alarm' | 'warning' | null
-export type FaultKind = 'drift' | 'rush' | 'backlight' | 'tft_lot'
+export type FaultKind = 'drift' | 'rush' | 'backlight' | 'tft_lot' | 'model_update'
+
+/** A likely cause of an alarm, ranked by the server (app/rootcause.py). */
+export interface LiveCause {
+  kind: 'event' | 'labeler' | 'concentration'
+  title: string
+  explanation: string
+  score: number
+}
 
 export interface LabelerSample {
   name: string
@@ -13,6 +21,8 @@ export interface LabelerSample {
   lcl: number
   signal: Signal
   rule: string | null
+  /** The judge's model version; null for people. */
+  version?: string | null
 }
 
 export interface PanelSample {
@@ -31,8 +41,15 @@ export type LiveEvent =
   | { type: 'fault'; fault: FaultKind; target: string }
   | { type: 'cleared'; fault: FaultKind; target: string }
   | { type: 'reset' }
-  | { type: 'detected'; fault: FaultKind; chart: string; samples: number; description: string }
-  | { type: 'false_alarm'; chart: string; description: string }
+  | {
+      type: 'detected'
+      fault: FaultKind
+      chart: string
+      samples: number
+      description: string
+      causes?: LiveCause[]
+    }
+  | { type: 'false_alarm'; chart: string; description: string; causes?: LiveCause[] }
 
 export interface Sample {
   sample: number
@@ -46,6 +63,9 @@ export interface Layout {
   target_error_rate: number
   baseline_samples: number
   labelers: string[]
+  /** The simulated LLM judge's chart name, and the version it starts on. */
+  judge?: string
+  judge_version?: string
   lines: string[]
   metrics: { key: string; name: string; unit: string }[]
 }

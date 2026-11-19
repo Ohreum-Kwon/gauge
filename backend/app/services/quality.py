@@ -249,8 +249,13 @@ def labeler_quality(project: Project, user: User, rows: list[LabelRow]) -> Label
         labels=len(rows),
         gold_answered=len(gold),
         gold_correct=sum(not r.is_error for r in gold),
-        median_time_ms=int(statistics.median(times)) if times else None,
-        fast_share=sum(t < FAST_LABEL_MS for t in times) / len(times) if times else None,
+        # A model's labeling speed says nothing about rushing.
+        median_time_ms=int(statistics.median(times)) if times and not user.is_model else None,
+        fast_share=(
+            sum(t < FAST_LABEL_MS for t in times) / len(times)
+            if times and not user.is_model
+            else None
+        ),
         status=status,
         latest_alert=upward[-1] if upward else None,
         model_version=next((r.model_version for r in reversed(rows) if r.model_version), None),

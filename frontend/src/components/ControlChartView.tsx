@@ -13,12 +13,38 @@ import { percent } from '../format'
 
 type Row = ChartPoint & { alerts: Alert[] }
 
-/** A labeler's p-chart: daily gold error rate against the target and its 3-sigma limits. */
-export default function ControlChartView({ chart }: { chart: ControlChart }) {
+/** How a chart's numbers read: the gold p-chart by default; the judge's agreement chart
+ * passes its own words. */
+export interface ChartWording {
+  series: string // legend for the plotted line
+  center: string // legend for the center line, before its value
+  defects: string // tooltip: "{rate} {defects} ({n} of {m} {noun})"
+  noun: string
+}
+
+const GOLD_WORDING: ChartWording = {
+  series: 'Daily error rate',
+  center: 'Target',
+  defects: 'wrong',
+  noun: 'gold',
+}
+
+/** A labeler's p-chart: daily gold error rate against the target and its 3-sigma limits.
+ * For a model labeler, a dotted line marks each day its model version changed. */
+export default function ControlChartView({
+  chart,
+  wording = GOLD_WORDING,
+}: {
+  chart: ControlChart
+  wording?: ChartWording
+}) {
   const rows: Row[] = chart.points.map((point) => ({
     ...point,
     alerts: chart.alerts.filter((a) => a.day === point.day),
   }))
+  const versionChanges = rows.filter(
+    (r, i) => i > 0 && r.model_version && r.model_version !== rows[i - 1].model_version,
+  )
   // Round the top up to the next 10% so ticks land on whole tens.
   const peak = Math.max(...rows.map((r) => Math.max(r.ucl, r.error_rate)))
   const top = Math.min(1, Math.ceil((peak + 0.02) * 10) / 10)
@@ -27,10 +53,13 @@ export default function ControlChartView({ chart }: { chart: ControlChart }) {
   return (
     <>
       <div className="legend" aria-hidden>
-        <span>Daily error rate</span>
-        <span className="target">Target {percent(chart.center)}</span>
+        <span>{wording.series}</span>
+        <span className="target">
+          {wording.center} {percent(chart.center)}
+        </span>
         <span className="limit">3σ control limits</span>
         <span className="alert">Alert</span>
+        {versionChanges.length > 0 && <span className="version">Model update</span>}
       </div>
       <div className="chart">
         <ResponsiveContainer width="100%" height="100%">
@@ -54,6 +83,21 @@ export default function ControlChartView({ chart }: { chart: ControlChart }) {
               width={48}
             />
             <ReferenceLine y={chart.center} stroke="var(--chart-limit)" strokeWidth={1.5} />
+            {versionChanges.map((r) => (
+              <ReferenceLine
+                key={r.day}
+                x={r.day}
+                stroke="var(--gold)"
+                strokeDasharray="2 3"
+                strokeWidth={2}
+                label={{
+                  value: r.model_version ?? '',
+                  position: 'insideTopLeft',
+                  fill: 'var(--gold)',
+                  fontSize: 12,
+                }}
+              />
+            ))}
             <Line
               dataKey="ucl"
               type="stepAfter"
@@ -82,17 +126,20 @@ export default function ControlChartView({ chart }: { chart: ControlChart }) {
               activeDot={{ r: 6, stroke: 'var(--surface)', strokeWidth: 2 }}
               isAnimationActive={false}
             />
-            <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'var(--chart-grid)' }} />
+            <Tooltip
+              content={<ChartTooltip wording={wording} />}
+              cursor={{ stroke: 'var(--chart-grid)' }}
+            />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
       <table className="sr-only">
-        <caption>Daily gold error rate</caption>
+        <caption>{wording.series}</caption>
         <thead>
           <tr>
             <th>Day</th>
-            <th>Errors</th>
-            <th>Error rate</th>
+            <th>{wording.defects}</th>
+            <th>Rate</th>
             <th>Upper limit</th>
           </tr>
         </thead>
@@ -129,7 +176,15 @@ function PointDot(props: { cx?: number; cy?: number; payload?: Row }) {
   )
 }
 
-function ChartTooltip({ active, payload }: { active?: boolean; payload?: { payload: Row }[] }) {
+function ChartTooltip({
+  active,
+  payload,
+  wording,
+}: {
+  active?: boolean
+  payload?: { payload: Row }[]
+  wording: ChartWording
+}) {
   const row = payload?.[0]?.payload
   if (!active || !row) return null
   return (
@@ -138,8 +193,10 @@ function ChartTooltip({ active, payload }: { active?: boolean; payload?: { paylo
         <strong>{row.day}</strong>
       </p>
       <p>
-        {percent(row.error_rate)} wrong ({row.errors} of {row.gold_answered} gold)
+        {percent(row.error_rate)} {wording.defects} ({row.errors} of {row.gold_answered}{' '}
+        {wording.noun})
       </p>
+      {row.model_version && <p className="muted">Model {row.model_version}</p>}
       <p className="muted">Upper limit {percent(row.ucl)}</p>
       {row.alerts.map((a) => (
         <p key={a.rule} className="error">

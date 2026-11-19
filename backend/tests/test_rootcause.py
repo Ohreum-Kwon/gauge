@@ -32,10 +32,14 @@ def chart(obs: list[Observation], center: float = 0.1):
     return days, z
 
 
-def test_the_run_starts_at_the_first_point_above_center_before_the_alert():
-    days = [DAY_1.date() + timedelta(days=i) for i in range(6)]
-    assert run_start(days, [-1, 0.5, -0.2, 0.4, 2.0, 3.5], days[5]) == days[3]
-    assert run_start(days, [1, 1, 1, 1, 1, 4], days[5]) == days[0]
+def test_the_run_starts_where_the_shift_most_likely_began():
+    days = [DAY_1.date() + timedelta(days=i) for i in range(8)]
+    # A barely-high point just before the shift isn't pulled in...
+    assert run_start(days, [-1, -1, -1, 0.4, 2.0, 3.5, 2.5, 3.0], days[7]) == days[4]
+    # ...and one low point inside it doesn't cut it short.
+    assert run_start(days, [-1, -1, -1, 3.0, 1.5, -0.7, 2.0, 3.0], days[7]) == days[3]
+    # Bad from the first day: the whole chart is the run.
+    assert run_start(days, [4, 4, 4, 4, 4, 4, 4, 4], days[7]) == days[0]
 
 
 def drift_week(broken=None) -> list[Observation]:
