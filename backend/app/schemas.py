@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.models import Role, TaskType
+from app.models import EventKind, Role, TaskType
 
 
 class Token(BaseModel):
@@ -333,3 +333,41 @@ class PanelChart(BaseModel):
     signals: list[PanelSignalOut]
     baseline_capability: CapabilityOut
     recent_capability: CapabilityOut
+
+
+class EventCreate(BaseModel):
+    """A guideline change logged by an admin. Model updates and batch uploads are
+    recorded automatically."""
+
+    description: str = Field(min_length=1, max_length=500)
+    # When the change took effect; defaults to now.
+    occurred_at: datetime | None = None
+
+
+class EventOut(BaseModel):
+    id: int
+    kind: EventKind
+    description: str
+    user_id: int | None
+    occurred_at: datetime
+
+
+class CauseOut(BaseModel):
+    kind: str  # "event", "labeler" or "concentration"
+    title: str
+    explanation: str
+    score: float  # 0 to 1; higher explains more of the shift
+    evidence: dict[str, Any]
+
+
+class RootCauseOut(BaseModel):
+    user_id: int
+    chart: str  # "gold" or "agreement"
+    alert_day: date
+    run_start: date  # first day of the shift being explained
+    compared_with: str  # "baseline" (the days before the run) or "center"
+    run_answers: int
+    run_rate: float
+    expected_rate: float
+    extra_errors: float
+    causes: list[CauseOut]

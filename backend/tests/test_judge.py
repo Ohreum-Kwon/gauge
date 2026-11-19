@@ -170,13 +170,14 @@ def test_a_version_change_records_a_model_update(session, overlap_project):
     run_judge(
         session, project, judge, FixedJudge("v1", "cat"), items_to_judge(session, project, judge)
     )
-    assert session.exec(select(ProjectEvent)).all() == []
+    updates = select(ProjectEvent).where(ProjectEvent.kind == EventKind.model_update)
+    assert session.exec(updates).all() == []
 
     label_next(session, project, alice, "dog")
     run_judge(
         session, project, judge, FixedJudge("v2", "dog"), items_to_judge(session, project, judge)
     )
-    event = session.exec(select(ProjectEvent)).one()
+    event = session.exec(updates).one()
     assert event.kind == EventKind.model_update and event.user_id == judge.id
     assert "v1 to v2" in event.description
 

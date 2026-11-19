@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import date
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session
 
 from app.db import get_session
@@ -7,6 +10,7 @@ from app.models import Project, ProjectMember, Role, User
 from app.schemas import (
     AgreementOut,
     AlertOut,
+    CauseOut,
     ChartPointOut,
     ControlChart,
     JudgeAgreementChartOut,
@@ -14,8 +18,9 @@ from app.schemas import (
     LabelerQualityOut,
     PairAgreementOut,
     ProjectQuality,
+    RootCauseOut,
 )
-from app.services import quality
+from app.services import quality, rootcause
 
 router = APIRouter(prefix="/projects/{project_id}/quality", tags=["quality"])
 
@@ -112,6 +117,47 @@ def judge_agreement_chart(
             for d in chart.days
         ],
         alerts=[_alert_out(a) for a in chart.alerts],
+    )
+
+
+@router.get("/labelers/{user_id}/root-cause")
+def root_cause(
+    user_id: int,
+    day: date,
+    chart: Literal["gold", "agreement"] = Query("gold"),
+    project: Project = Depends(get_visible_project),
+    _: User = Depends(staff_only),
+    session: Session = Depends(get_session),
+) -> RootCauseOut:
+    """Likely causes of the upward alert on `day` of a labeler's chart, ranked, each
+    with a one-line explanation. See app/rootcause.py for how they are scored."""
+    user = session.get(User, user_id)
+    if user is None or session.get(ProjectMember, (project.id, user_id)) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not a member of this project")
+    try:
+        analysis = rootcause.explain_alert(session, project, user, day, chart)
+    except rootcause.NoSuchAlert as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+    return RootCauseOut(
+        user_id=user_id,
+        chart=chart,
+        alert_day=analysis.alert_day,
+        run_start=analysis.run_start,
+        compared_with=analysis.compared_with,
+        run_answers=analysis.run_answers,
+        run_rate=analysis.run_rate,
+        expected_rate=analysis.expected_rate,
+        extra_errors=analysis.extra_errors,
+        causes=[
+            CauseOut(
+                kind=c.kind.value,
+                title=c.title,
+                explanation=c.explanation,
+                score=c.score,
+                evidence=c.evidence,
+            )
+            for c in analysis.causes
+        ],
     )
 
 

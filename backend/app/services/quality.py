@@ -181,6 +181,20 @@ def _versions_by_day(rows: list[LabelRow]) -> dict[date, str]:
     return {day: c.most_common(1)[0][0] for day, c in counts.items()}
 
 
+def majority_answers(rows: list[LabelRow]) -> dict[int, str]:
+    """Each item's most common answer among `rows`; items where the top answers tie are
+    left out."""
+    votes: dict[int, Counter[str]] = defaultdict(Counter)
+    for row in rows:
+        votes[row.item_id][row.value] += 1
+    answers: dict[int, str] = {}
+    for item_id, counter in votes.items():
+        top = counter.most_common(2)
+        if len(top) == 1 or top[0][1] > top[1][1]:
+            answers[item_id] = top[0][0]
+    return answers
+
+
 def judge_agreement_chart(
     judge_rows: list[LabelRow], reference_rows: list[LabelRow]
 ) -> JudgeAgreementChart | None:
@@ -188,14 +202,7 @@ def judge_agreement_chart(
     labels. On an item several reference people labeled, the judge is compared with
     their majority (items where they tie are skipped). None until the baseline days
     hold enough compared labels to set a center line."""
-    votes: dict[int, Counter[str]] = defaultdict(Counter)
-    for row in reference_rows:
-        votes[row.item_id][row.value] += 1
-    reference: dict[int, str] = {}
-    for item_id, counter in votes.items():
-        top = counter.most_common(2)
-        if len(top) == 1 or top[0][1] > top[1][1]:
-            reference[item_id] = top[0][0]
+    reference = majority_answers(reference_rows)
 
     disagree: dict[date, int] = defaultdict(int)
     sizes: dict[date, int] = defaultdict(int)
