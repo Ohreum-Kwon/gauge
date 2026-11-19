@@ -107,6 +107,52 @@ describe('LivePage', () => {
     ).toBeInTheDocument()
   })
 
+  it('ships the judge a model update and shows why the alarm fired', async () => {
+    const fetchMock = mockApi({ 'POST /api/live/sess1/faults': () => ({ status: 204 }) })
+    renderAt(<LivePage />, { route: '/' })
+    const es = FakeEventSource.last
+    es.emit('session', { ...layout, judge: 'judge', judge_version: 'judge-v1' })
+    const withJudge = (n: number, events: Sample['events'] = []) => {
+      const s = sample(n, events)
+      return {
+        ...s,
+        labelers: [...s.labelers, { ...s.labelers[0], name: 'judge', version: 'judge-v1' }],
+      }
+    }
+    es.emit('history', [withJudge(1), withJudge(2), withJudge(3)])
+    expect(screen.getByRole('img', { name: 'LLM judge control chart' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ship a model update' }))
+    const [, init] = fetchMock.mock.calls[0]
+    expect(JSON.parse(init?.body as string)).toEqual({ fault: 'model_update', target: 'judge' })
+
+    es.emit('sample', withJudge(4, [{ type: 'fault', fault: 'model_update', target: 'judge' }]))
+    expect(screen.getByRole('button', { name: 'Ship a model update' })).toBeDisabled()
+    es.emit(
+      'sample',
+      withJudge(6, [
+        {
+          type: 'detected',
+          fault: 'model_update',
+          chart: 'judge',
+          samples: 2,
+          description: '2 of 3 points in a row beyond 2 sigma on one side',
+          causes: [
+            {
+              kind: 'event',
+              title: 'Model update: judge-v1 to judge-v2',
+              explanation: 'Happened at sample 4, the sample the shift began.',
+              score: 1,
+            },
+          ],
+        },
+      ]),
+    )
+    expect(screen.getByText(/Caught on LLM judge after 2 samples/)).toBeInTheDocument()
+    expect(screen.getByText('Model update: judge-v1 to judge-v2')).toBeInTheDocument()
+    expect(screen.getByText('Change at the onset')).toBeInTheDocument()
+  })
+
   it('offers a new run when the stream ends', async () => {
     mockApi({})
     renderAt(<LivePage />, { route: '/' })

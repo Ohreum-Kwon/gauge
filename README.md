@@ -12,16 +12,23 @@ engineers use on factory gauges.
 
 ![A reviewer opens the quality dashboard, finds the labeler who drifted on day 6, and resolves a flagged item](docs/demo.gif)
 
+An **LLM judge** can label alongside the people in shadow mode, on the same control
+charts plus one of its own, so a model update that quietly shifts its answers gets caught
+too. When any chart raises an alert, Gauge **ranks the likely causes** (a change at the
+onset, one labeler alone, or errors piled up in one class, batch or shift) with a
+one-line reason for each. See [LLM judge](#llm-judge) and [Root cause](#root-cause).
+
 Gauge also runs the same statistics on a **display panel production line**: simulated
 end-of-line test data for color, luminance and uniformity, and for TFT backplane
 electricals, on X̄/R and EWMA charts with Cpk. See [Panel line](#panel-line).
 
 **Try it:** [the live demo](https://gauge-w270.onrender.com) opens on a landing page. **[Break it
 yourself](https://gauge-w270.onrender.com/live)** streams a private, live copy of Gauge
-where you inject faults (a drifting labeler, a rushing one, an ageing backlight, a bad TFT
-lot) and watch the control charts catch them, with the detection delay and any false
-alarms counted. The landing page also has one-click tours: catch the drifting labeler,
-watch a display line drift, or label images yourself. No sign-up. It runs on Render's free tier; a scheduled ping
+where you inject faults (a drifting labeler, a rushing one, a quiet model update to the LLM
+judge, an ageing backlight, a bad TFT lot) and watch the control charts catch them, with
+the detection delay, any false alarms, and the ranked causes of each alarm. The landing
+page also has one-click tours: catch the drifting labeler, catch the LLM judge after its
+model update, watch a display line drift, or label images yourself. No sign-up. It runs on Render's free tier; a scheduled ping
 ([`keep-awake.yml`](.github/workflows/keep-awake.yml)) keeps it from going to sleep, so it
 should open in seconds rather than after a minute's cold start.
 
@@ -87,6 +94,20 @@ would change).
   database can sleep while people watch. Sessions are capped and end after ten minutes.
   This only works with one instance; with more, fault requests would need sticky routing
   or a shared channel such as Redis pub/sub.
+- **The LLM judge runs in shadow mode.** It labels the items people label, after them,
+  and its labels never fill an item's required labels, count toward Fleiss' kappa, or
+  decide a final label. That keeps the people's queue and agreement numbers exactly as
+  they were, and makes the judge something you monitor before you trust it.
+- **Two charts for a model, because gold is scarce.** The judge's gold p-chart works
+  like anyone's, but gold is a small share of the work. Its second chart counts how
+  often it disagrees with the people who are currently in control, on every item, gold
+  or not, centered on its own first three days. In the simulated week that chart catches
+  the model update on day 6, a day before gold does.
+- **Root cause by arithmetic, not by a language model.** Every ranking comes from counts
+  you can check by hand (extra errors, shares of answers, before-and-after rates), with
+  the formulas in `app/rootcause.py`. A concentration has to beat the rest of the shift
+  by a z of 3.5, since the set of classes is picked to look as bad as possible; at 3.0,
+  about one healthy drift in ten showed a made-up class pattern in the live demo.
 - **One container, one origin.** In production FastAPI also serves the built frontend.
   That means one free Render service, no CORS, and no API URL to wire between services.
   In development Vite serves the frontend and proxies `/api`.
@@ -142,6 +163,7 @@ Demo accounts all use the password `gauge-demo`:
 | labeler1@gauge.dev … labeler4@gauge.dev | Labeler: works through a queue |
 | reviewer@gauge.dev | Reviewer: watches quality dashboards and resolves items in the review queue |
 | sim-reliable, sim-noisy, sim-drifter, sim-rusher @gauge.dev | Simulated labelers |
+| sim-judge@gauge.dev | Simulated LLM judge (a model account: nobody can sign in as it) |
 
 ## How quality is measured
 
@@ -161,6 +183,70 @@ examples (Fleiss 1971, among others).
 the real queue: one reliable (95% right), one noisy (70%), one who drifts from 95% to 60%
 on day 6, and one who clicks the first option in half a second every time. The drifter's
 chart goes out of control on day 6, which a slow test in CI checks on every push.
+
+## LLM judge
+
+![The simulated LLM judge after its quiet v2 update: both charts go out of control at the dotted model-update line, and the latest alert's likely causes are the update, the judge alone, and cat, truck and dog.](docs/judge.png)
+
+A model labeler (`users.is_model`) labels in **shadow mode**: after people label an item,
+the judge labels it too, and every label records the model version that gave it
+(`labels.model_version`). It appears on the quality page with a **Model** tag and two
+charts:
+
+| Chart | What it plots | Center line |
+|---|---|---|
+| Gold error rate | The same p-chart as everyone's | The project's target |
+| Disagreement with people | How often it disagrees with in-control people, on every item they labeled (their majority where several did) | Its own rate over its first 3 days (phase I) |
+
+A dotted line marks each day the model version changed, and a version change is stored
+as a `model_update` event for [root-cause analysis](#root-cause).
+
+In the simulated week, `sim-judge` runs `sim-judge-v1` (94% right) for five days, then a
+"quiet" `sim-judge-v2` on day 6 that reads cats as dogs, dogs as cats and trucks as cars,
+while staying right on the other seven classes. Overall gold accuracy still looks fine at
+a glance (90% for the week); the disagreement chart flags day 6, and the gold chart
+follows on day 7.
+
+The simulated judge is deterministic (a hash of the item and the version) and needs no
+API key, so the public demo costs nothing to run. A real one is optional:
+
+```sh
+uv sync --extra llm
+export ANTHROPIC_API_KEY=...
+uv run python -m app.judge --project 3 --provider anthropic --limit 50
+```
+
+That labels up to 50 items the judge hasn't seen with Claude (`GAUGE_JUDGE_MODEL`,
+default `claude-opus-5-5`), constrained to the project's label options. Each run picks
+up where the last stopped, so it can go on a schedule; changing the model shows up as a
+model update on the charts. `--provider simulated --version sim-judge-v2` does the same
+with the simulated versions.
+
+## Root cause
+
+When a Western Electric rule fires, **Why?** next to the alert (open by default for the
+latest one) ranks the likely causes. `GET /api/projects/{id}/quality/labelers/{uid}/root-cause?day=…&chart=gold|agreement`
+returns the same thing. How it works (`backend/app/rootcause.py`, pure functions):
+
+1. **Find the shift.** A CUSUM change-point estimate picks where the shift that ends at
+   the alert began. The days before it are the baseline, and the shift's *extra errors*
+   are its errors beyond what the baseline rate predicts. A labeler bad from day one is
+   compared with the target instead.
+2. **Score each candidate from 0 to 1:**
+
+   | Candidate | Score |
+   |---|---|
+   | A change at the onset: a model update, a guideline change (`POST /api/projects/{id}/events`), or a new batch (recorded on upload) | Share of the extra errors that came after it, if it happened up to 2 days before the shift began, or during it |
+   | This labeler alone | How much of their change the typical (median) other person didn't share over the same days |
+   | A concentration by true class, batch or shift | The largest gap between a set of values' share of extra errors and their share of answers: "3 classes hold 89% of the extra errors but 32% of the answers" scores 0.57 |
+
+3. Keep candidates that score 0.15 or more and pass a significance check, and rank them.
+
+On the simulated week, the judge's alert traces first to `sim-judge-v1 → v2` ("the day
+the shift began, 3% before it, 27% after"), then to cat, truck and dog; the drifter's
+traces to the drifter alone ("6% to 40%, the typical other labeler changed by −1%"); and
+the rusher's to the rusher being far worse than everyone else. When nothing stands out,
+it says so, which is what a chance alarm looks like.
 
 ## Review and final labels
 
@@ -230,7 +316,7 @@ CIEDE2000 reference pairs.
 
 The [Break it yourself](https://gauge-w270.onrender.com/live) page runs on two endpoints.
 `GET /api/live/stream` starts a private, live version of both stories and streams it
-over server-sent events: three labelers answering gold questions and one panel line
+over server-sent events: three labelers and an LLM judge answering gold questions and one panel line
 testing five panels per subgroup, a sample a second. `POST /api/live/{id}/faults`
 injects a fault into that stream:
 
@@ -238,6 +324,7 @@ injects a fault into that stream:
 |---|---|---|---|
 | `drift` | a labeler | Accuracy slides 3 points per sample from ~95% to 60% | 7 samples (2-of-3 beyond 2σ, or 3σ) |
 | `rush` | a labeler | Clicks the first of ten options | 1 sample |
+| `model_update` | the judge | Ships `judge-v2`, right only 30% of the time on cat, dog and truck | 2 samples |
 | `backlight` | a line | Backlight ageing, as in the panel line week | 11 samples (the EWMA warns first) |
 | `tft_lot` | a line | Eight subgroups from a lot with Vth 0.06 V high | 1 sample |
 
@@ -247,6 +334,11 @@ healthy chart is reported as a **false alarm**. Those happen: each panel chart c
 3σ by chance about once in 370 points, so a few minutes of watching will usually show
 one, and the demo labels it rather than hiding it. Delays above are medians over 200
 seeds; `backend/app/live.py` has the model and `tests/test_live.py` pins the behavior.
+
+Every alarm on a labeler chart carries its [root-cause](#root-cause) ranking, computed
+from that labeler's last 40 samples of gold answers. Ship the judge a model update and
+the alarm traces back to the update (in all of 200 seeds) and usually to the classes it
+broke; make Avery drift and it traces to Avery alone.
 
 ## Deploy
 
@@ -301,11 +393,14 @@ backend/
   app/
     models.py         tables
     schemas.py        API request/response bodies (kept apart so hashes and gold answers can't leak)
-    routers/          auth, users, projects, labeling, quality, review, audit log, panel line
+    routers/          auth, users, projects, labeling, quality, events, review, audit log, panel line, live
     stats.py          kappa, p-charts, Western Electric rules (pure functions)
+    rootcause.py      ranks likely causes of a chart alert (pure functions)
+    judges.py         model labelers: the simulated judge and the optional Claude one
+    judge.py          CLI that runs a judge over a project in shadow mode
     spc.py            X-bar/R, EWMA and Cpk for continuous measurements (pure functions)
     panel.py          panel metrics, spec limits, CIEDE2000, uniformity, gamma fit
-    services/         queue selection, quality reports, review queue, file ingest, audit log, panel line charts
+    services/         queue selection, quality reports, judge runs, root cause, review queue, file ingest, audit log, panel line charts
     simulate.py       simulated labelers for the drift demo
     panel_sim.py      simulated display panel line for the panel line demo
   alembic/            migrations
@@ -332,6 +427,9 @@ render.yaml           Render Blueprint
 5. **Panel line:** variables control charts, Cpk and a simulated display panel line,
    with optical (luminance, uniformity, ΔE2000, gamma) and TFT/electrical metrics
 
+6. **LLM judge and root cause:** a model labeler in shadow mode with gold and
+   agreement charts, a simulated model update, and ranked causes for every alert,
+   live demo included
+
 Next, if there's time: the pairwise preference labeling UI (the upload format already
-supports it) and an LLM labeler that joins the queue as one more labeler, measured on
-the same control chart as the people.
+supports it).

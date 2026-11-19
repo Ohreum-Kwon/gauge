@@ -1,8 +1,10 @@
 import type {
   AuditPage,
+  ChartKind,
   ControlChart,
   GoldAccuracy,
   Item,
+  JudgeAgreementChart,
   PanelChart,
   PanelLineSummary,
   Progress,
@@ -11,6 +13,7 @@ import type {
   ProjectQuality,
   ProjectSummary,
   ReviewQueue,
+  RootCause,
   Task,
   UploadResult,
   User,
@@ -110,6 +113,14 @@ export const api = {
   quality: (projectId: number) => request<ProjectQuality>(`/projects/${projectId}/quality`),
   controlChart: (projectId: number, userId: number) =>
     request<ControlChart>(`/projects/${projectId}/quality/labelers/${userId}/chart`),
+  agreementChart: (projectId: number, userId: number) =>
+    request<JudgeAgreementChart | null>(
+      `/projects/${projectId}/quality/labelers/${userId}/agreement-chart`,
+    ),
+  rootCause: (projectId: number, userId: number, day: string, chart: ChartKind) =>
+    request<RootCause>(
+      `/projects/${projectId}/quality/labelers/${userId}/root-cause?day=${day}&chart=${chart}`,
+    ),
 
   reviewQueue: (projectId: number) => request<ReviewQueue>(`/projects/${projectId}/review`),
   resolve: (projectId: number, itemId: number, value: string) =>

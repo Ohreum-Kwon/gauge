@@ -6,7 +6,17 @@ from sqlmodel import Session, col, func, select
 from app.config import get_settings
 from app.db import get_session
 from app.deps import get_current_user, get_rng, get_visible_project, require_role
-from app.models import Item, Label, Project, ProjectMember, Role, User
+from app.models import (
+    EventKind,
+    Item,
+    Label,
+    Project,
+    ProjectEvent,
+    ProjectMember,
+    Role,
+    User,
+    utcnow,
+)
 from app.schemas import (
     ItemOut,
     MembersUpdate,
@@ -140,16 +150,27 @@ async def upload_items(
     except IngestError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
+    now = utcnow()
+    batch = f"{file.filename or 'upload'} ({now:%Y-%m-%d %H:%M})"[-100:]
     session.add_all(
         Item(
             project_id=project.id,
             payload=p.payload,
             gold_answer=p.gold_answer,
             required_labels=_required_labels(project, p.gold_answer, rng),
+            batch=batch,
         )
         for p in parsed
     )
     gold = sum(p.gold_answer is not None for p in parsed)
+    session.add(
+        ProjectEvent(
+            project_id=project.id,
+            kind=EventKind.batch_upload,
+            description=f"New batch: {batch}, {len(parsed)} items",
+            occurred_at=now,
+        )
+    )
     audit.record(
         session,
         admin,

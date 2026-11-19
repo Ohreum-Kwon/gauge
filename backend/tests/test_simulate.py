@@ -13,8 +13,9 @@ from sqlmodel import Session, SQLModel
 
 from app import simulate
 from app.models import Role, User
+from app.rootcause import CauseKind
 from app.security import hash_password
-from app.services import quality
+from app.services import quality, rootcause
 
 
 @pytest.fixture
@@ -60,6 +61,37 @@ def test_simulation_flags_the_drifter_on_day_6(committing_session, tmp_path, mon
     assert by_name["noisy"].status == "out_of_control"
     assert by_name["rusher"].status == "out_of_control"
     assert by_name["rusher"].fast_share > 0.9
+
+    # The judge's model update on day 6: its agreement with the in-control people
+    # catches it that day, and its gold chart goes out of control too.
+    judge = by_name["judge"]
+    assert judge.user.is_model and judge.model_version == "sim-judge-v2"
+    assert judge.status == "out_of_control"
+    assert alert_days("judge")[0] in (6, 7)
+    judge_chart = quality.judge_chart_for(session, project, judge.user)
+    first = judge_chart.days[0].day
+    assert judge_chart.reference_user_ids == [by_name["reliable"].user.id]
+    assert [(a.day - first).days + 1 for a in judge_chart.alerts if a.violation.above][0] == 6
+    assert [d.model_version for d in judge_chart.days[4:6]] == ["sim-judge-v1", "sim-judge-v2"]
+
+    # Root cause: the judge's shift is traced to its model update first, with the broken
+    # classes next; the drifter's to the drifter alone.
+    def causes(name: str, chart: str = "gold"):
+        user = by_name[name].user
+        rows = quality.load_rows(session, project, user_id=user.id)
+        result = quality.labeler_chart(project, rows) if chart == "gold" else judge_chart
+        day = [a.day for a in result.alerts if a.violation.above][-1]
+        return rootcause.explain_alert(session, project, user, day, chart).causes
+
+    for chart_name in ("gold", "agreement"):
+        judge_causes = causes("judge", chart_name)
+        assert judge_causes[0].kind == CauseKind.event
+        assert "sim-judge-v2" in judge_causes[0].title
+        broken = next(c for c in judge_causes if c.kind == CauseKind.concentration)
+        assert set(broken.evidence["values"]) == {"cat", "dog", "truck"}
+    drifter_causes = causes("drifter")
+    assert drifter_causes[0].kind == CauseKind.labeler
+    assert drifter_causes[0].score > 0.8
 
     # The rusher agrees with nobody beyond chance; the others mostly agree.
     rusher_id = by_name["rusher"].user.id

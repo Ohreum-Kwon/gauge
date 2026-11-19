@@ -54,6 +54,7 @@ def test_healthy_demo_is_quiet_with_this_seed():
         (Fault.drift, "avery", "avery", 12),
         (Fault.tft_lot, "L1", "L1:tft_vth", 1),
         (Fault.backlight, "L1", "L1:white_luminance", 20),
+        (Fault.model_update, "judge", "judge", 8),
     ],
 )
 def test_each_fault_is_detected_on_its_chart(fault, target, chart, within):
@@ -111,7 +112,60 @@ def test_an_alarm_on_a_healthy_chart_is_a_false_alarm():
     ]
 
 
-@pytest.mark.parametrize(("fault", "target"), [(Fault.rush, "L1"), (Fault.backlight, "avery")])
+def test_the_model_update_alarm_is_traced_to_the_update_and_its_classes():
+    demo = warmed_up()
+    demo.inject(Fault.model_update, "judge")
+    detected = next(e for e in run(demo, 8) if e["type"] == "detected")
+    kinds = [c["kind"] for c in detected["causes"]]
+    assert kinds[0] == "event"
+    assert detected["causes"][0]["title"] == "Model update: judge-v1 to judge-v2"
+    assert "the sample the shift began" in detected["causes"][0]["explanation"]
+    assert demo.step()["labelers"][3]["version"] == "judge-v2"
+
+
+def test_the_broken_classes_usually_show_up_too():
+    # At detection the run is a few samples long, so the classes don't always clear
+    # the bar; across visits they mostly do, and they're the right ones.
+    found = 0
+    for seed in range(20):
+        demo = LiveDemo(seed)
+        run(demo, BASELINE_SAMPLES + 10)
+        demo.inject(Fault.model_update, "judge")
+        detected = next(e for e in run(demo, 10) if e["type"] == "detected")
+        titles = [c["title"] for c in detected["causes"] if c["kind"] == "concentration"]
+        if titles:
+            classes = set(titles[0].removeprefix("True class: ").split(", "))
+            found += (
+                classes <= {"cat", "dog", "truck"} or len(classes & {"cat", "dog", "truck"}) >= 2
+            )
+    assert found >= 14
+
+
+def test_a_drifting_person_is_traced_to_that_person():
+    demo = warmed_up()
+    demo.inject(Fault.drift, "avery")
+    detected = next(e for e in run(demo, 12) if e["type"] == "detected")
+    assert detected["causes"][0]["kind"] == "labeler"
+    assert detected["causes"][0]["title"] == "Only avery changed"
+
+
+def test_reset_rolls_the_judge_back():
+    demo = warmed_up()
+    demo.inject(Fault.model_update, "judge")
+    demo.reset()
+    assert demo.labelers["judge"].version == "judge-v1"
+    assert demo.labelers["judge"].fault is None
+
+
+@pytest.mark.parametrize(
+    ("fault", "target"),
+    [
+        (Fault.rush, "L1"),
+        (Fault.backlight, "avery"),
+        (Fault.model_update, "avery"),
+        (Fault.drift, "judge"),
+    ],
+)
 def test_faults_only_apply_to_their_kind_of_target(fault, target):
     with pytest.raises(KeyError):
         LiveDemo(SEED).inject(fault, target)

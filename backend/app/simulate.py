@@ -10,11 +10,15 @@ The labelers:
 - drifter:  right 95% of the time for five days, then 60% from day 6
 - rusher:   clicks the first option in about half a second, every time
 
+Alongside them, a simulated LLM judge (sim-judge) labels every item in shadow mode. It
+runs version sim-judge-v1 for five days, then a "model update" to sim-judge-v2 on day 6
+quietly breaks three classes (cat, dog, truck) while staying right on the other seven.
+
 It labels through the real queue and label service, so gold mixing, overlap and the
 audit log behave exactly as they do for people. Timestamps are backdated over the last
 DAYS days. Expected result: the drifter's control chart goes out of control on day 6,
 the noisy labeler and the rusher are out of control throughout, the reliable labeler
-stays in control.
+stays in control, and the judge's charts go out of control on day 6.
 """
 
 import argparse
@@ -28,9 +32,12 @@ from datetime import UTC, datetime, time, timedelta
 from sqlmodel import Session, col, func, select
 
 from app.db import get_engine
+from app.judge import SIM_JUDGE_EMAIL
+from app.judges import SimulatedJudge
 from app.models import Item, Label, Project, ProjectMember, Role, TaskType, User
 from app.security import hash_password
 from app.seed import CIFAR_CLASSES, CIFAR_CSV
+from app.services.judge import get_or_create_judge, items_to_judge, run_judge
 from app.services.labeling import submit_label
 from app.services.queue import get_or_assign_next
 
@@ -40,6 +47,8 @@ LABELS_PER_DAY = 100
 # Each image is reused this many times, so the queue never runs dry mid-simulation.
 COPIES_PER_IMAGE = 10
 GOLD_SHARE = 0.2
+# The day the judge's model update ships.
+JUDGE_UPDATE_DAY = 6
 
 
 @dataclass(frozen=True)
@@ -69,7 +78,9 @@ def simulate(session: Session, reset: bool = False, seed: int = 7) -> Project:
     existing = session.exec(select(Project).where(Project.name == PROJECT_NAME)).first()
     if existing is not None:
         # A run cut short (say, by a server restart) leaves a partial week; redo it.
-        complete = _simulated_labels(session, existing) == DAYS * LABELS_PER_DAY * len(PERSONAS)
+        complete = _simulated_labels(session, existing) == DAYS * LABELS_PER_DAY * len(
+            PERSONAS
+        ) and _judge_caught_up(session, existing)
         if complete and not reset:
             print(f"'{PROJECT_NAME}' already exists; pass --reset to simulate again")
             return existing
@@ -94,7 +105,15 @@ def simulate(session: Session, reset: bool = False, seed: int = 7) -> Project:
     session.flush()
     truth = _create_items(session, project, rng)
     labelers = _create_labelers(session, project)
+    judge_user = get_or_create_judge(session, project, SIM_JUDGE_EMAIL)
     session.commit()
+    truth_by_url = {}
+    for item in session.exec(select(Item).where(Item.project_id == project.id)):
+        truth_by_url[item.payload["image_url"]] = truth[item.id]
+    judges = {
+        version: SimulatedJudge(version, lambda p: truth_by_url.get(p["image_url"]))
+        for version in ("sim-judge-v1", "sim-judge-v2")
+    }
 
     start = datetime.combine(datetime.now(UTC).date() - timedelta(days=DAYS), time(9), UTC)
     for day in range(1, DAYS + 1):
@@ -111,7 +130,19 @@ def simulate(session: Session, reset: bool = False, seed: int = 7) -> Project:
                 clocks[persona.name] += timedelta(milliseconds=ms + rng.randint(500, 4000))
                 value = _answer(persona, day, truth[assignment.item_id], rng)
                 submit_label(session, assignment, user, value, ms, at=clocks[persona.name])
-        print(f"Day {day}: {LABELS_PER_DAY} labels each from {len(PERSONAS)} labelers")
+        judge = judges["sim-judge-v1" if day < JUDGE_UPDATE_DAY else "sim-judge-v2"]
+        shadowed = run_judge(
+            session,
+            project,
+            judge_user,
+            judge,
+            items_to_judge(session, project, judge_user),
+            backdate=True,
+        )
+        print(
+            f"Day {day}: {LABELS_PER_DAY} labels each from {len(PERSONAS)} labelers, "
+            f"{shadowed} from {judge.version}"
+        )
     return project
 
 
@@ -124,6 +155,15 @@ def _simulated_labels(session: Session, project: Project) -> int:
         .join(User, col(User.id) == Label.user_id)
         .where(Item.project_id == project.id, col(User.email).in_([p.email for p in PERSONAS]))
     ).one()
+
+
+def _judge_caught_up(session: Session, project: Project) -> bool:
+    """The judge labeled everything the personas did (False for weeks simulated before
+    the judge existed, so they are redone with it)."""
+    judge = session.exec(select(User).where(User.email == SIM_JUDGE_EMAIL)).first()
+    if judge is None or session.get(ProjectMember, (project.id, judge.id)) is None:
+        return False
+    return not items_to_judge(session, project, judge, limit=1)
 
 
 def _create_items(session: Session, project: Project, rng: random.Random) -> dict[int, str]:

@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import CauseList from '../components/CauseList'
 import LiveChart, { type LivePoint } from '../components/LiveChart'
 import { faultChart, useLiveDemo, type FaultKind, type LiveEvent, type Sample } from '../live'
 
 const WINDOW = 60
 const REPO = 'https://github.com/Ohreum-Kwon/gauge'
 
-const title = (name: string) => name[0].toUpperCase() + name.slice(1)
+const title = (name: string) =>
+  name === 'judge' ? 'LLM judge' : name[0].toUpperCase() + name.slice(1)
 const percent = (v: number) => `${Math.round(v * 100)}%`
 
 const METRIC_FORMAT: Record<string, (v: number) => string> = {
@@ -34,6 +36,7 @@ function describe(event: LiveEvent): { text: string; tone: string } {
           rush: `You made ${title(event.target)} start rushing.`,
           backlight: `You started ageing ${event.target}'s backlights.`,
           tft_lot: `${event.target} is now building from a bad TFT lot.`,
+          model_update: 'You shipped the LLM judge a quiet model update (judge-v2).',
         }[event.fault],
       }
     case 'detected':
@@ -49,7 +52,10 @@ function describe(event: LiveEvent): { text: string; tone: string } {
     case 'cleared':
       return { tone: 'info', text: `${event.target}'s bad TFT lot ran out.` }
     case 'reset':
-      return { tone: 'info', text: 'Everything reset: labelers retrained, backlights replaced.' }
+      return {
+        tone: 'info',
+        text: 'Everything reset: labelers retrained, the judge rolled back, backlights replaced.',
+      }
   }
 }
 
@@ -86,9 +92,9 @@ export default function LivePage() {
         <div>
           <h1>Break it yourself</h1>
           <p className="lede">
-            A private copy of Gauge is running just for you: three labelers answering gold questions
-            and a display line testing five panels, one sample a second. Inject a fault and watch
-            the control charts catch it.
+            A private copy of Gauge is running just for you: three labelers and an LLM judge
+            answering gold questions, and a display line testing five panels, one sample a second.
+            Inject a fault and watch the control charts catch it, and Gauge explain why.
           </p>
         </div>
         <StatusPill status={live.status} sample={latest?.sample} restart={live.restart} />
@@ -154,6 +160,16 @@ export default function LivePage() {
                 </div>
               </div>
             ))}
+            {layout.judge && (
+              <JudgeChart
+                name={layout.judge}
+                samples={samples}
+                targetTop={errorRateTop(samples)}
+                faultSince={activeFaults[layout.judge]}
+                disabled={live.status !== 'live' || layout.judge in activeFaults}
+                onShip={() => void send({ fault: 'model_update', target: layout.judge! })}
+              />
+            )}
           </section>
 
           <section>
@@ -205,9 +221,14 @@ export default function LivePage() {
               {log.length === 0 && <li className="muted">Nothing yet. Try one of the buttons.</li>}
               {log.map(({ sample, event }, i) => {
                 const { text, tone } = describe(event)
+                const causes =
+                  event.type === 'detected' || event.type === 'false_alarm'
+                    ? event.causes
+                    : undefined
                 return (
                   <li key={`${sample}-${i}`} className={`tone-${tone}`}>
                     <span className="muted">#{sample}</span> {text}
+                    {causes && <CauseList causes={causes} compact />}
                   </li>
                 )
               })}
@@ -215,6 +236,42 @@ export default function LivePage() {
           </section>
         </div>
       )}
+    </div>
+  )
+}
+
+function JudgeChart(props: {
+  name: string
+  samples: Sample[]
+  targetTop: number
+  faultSince?: number
+  disabled: boolean
+  onShip: () => void
+}) {
+  const current = props.samples.at(-1)?.labelers.find((l) => l.name === props.name)
+  return (
+    <div>
+      <LiveChart
+        title="LLM judge"
+        subtitle={`gold error rate · ${current?.version ?? 'judge-v1'}`}
+        points={labelerPoints(props.samples, props.name)}
+        window={WINDOW}
+        {...limitsOf(current)}
+        domain={[0, props.targetTop]}
+        format={percent}
+        faultSince={props.faultSince}
+        alarm={current?.signal === 'alarm'}
+      />
+      <div className="live-actions">
+        <button
+          type="button"
+          className="secondary"
+          disabled={props.disabled}
+          onClick={props.onShip}
+        >
+          Ship a model update
+        </button>
+      </div>
     </div>
   )
 }

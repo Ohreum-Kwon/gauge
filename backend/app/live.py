@@ -10,16 +10,25 @@ Because the demo knows which faults are active, it can grade its own detectors: 
 on a chart with a fault is a detection (with its delay in samples), and an alarm on a
 healthy chart is a false alarm. Those happen: a 3-sigma limit is crossed by chance about
 once in 370 points, and the demo says so rather than hiding it.
+
+Every alarm on a labeler chart comes with a root-cause ranking (app.rootcause) from the
+labeler's recent gold answers, so a visitor who ships the judge a model update sees the
+alarm traced back to the update and to the classes it broke, and a false alarm usually
+shows no clear cause.
 """
 
 import random
 import statistics
+from collections import deque
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
 from app.panel import METRICS
 from app.panel_sim import PANELS_PER_SUBGROUP, panel_readings
+from app.rootcause import Event, Observation, analyze
+from app.seed import CIFAR_CLASSES
 from app.spc import XbarRLimits, ewma_chart, xbar_r_chart, xbar_r_limits
 from app.stats import RULE_DESCRIPTIONS, Rule, p_chart, western_electric
 
@@ -35,6 +44,15 @@ EWMA_RULE = "ewma_beyond_limit"
 RULE_TEXT = {**{r.value: d for r, d in RULE_DESCRIPTIONS.items()}, EWMA_RULE: "EWMA beyond limit"}
 
 LABELERS = {"avery": 0.95, "blake": 0.94, "casey": 0.96}  # healthy gold accuracy
+JUDGE = "judge"  # a simulated LLM judge, labeling alongside the people
+JUDGE_ACCURACY = 0.95
+JUDGE_VERSIONS = ("judge-v1", "judge-v2")
+# The model update quietly breaks these classes: right this often on them.
+BROKEN_CLASSES = ("cat", "dog", "truck")
+BROKEN_ACCURACY = 0.3
+HISTORY = 40  # samples of gold answers kept per labeler for root-cause analysis
+CAUSES_SHOWN = 3
+_EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 LINES = ("L1",)  # one line, two charts: few false alarms in a short visit
 PANEL_METRICS = ("white_luminance", "tft_vth")
 
@@ -42,11 +60,13 @@ PANEL_METRICS = ("white_luminance", "tft_vth")
 class Fault(StrEnum):
     drift = "drift"  # a labeler's accuracy slides from ~95% to 60%
     rush = "rush"  # a labeler starts clicking the first option
+    model_update = "model_update"  # the judge ships a version that breaks three classes
     backlight = "backlight"  # a line's backlights start ageing
     tft_lot = "tft_lot"  # a line builds from a lot with high threshold voltage
 
 
 LABELER_FAULTS = {Fault.drift, Fault.rush}
+JUDGE_FAULTS = {Fault.model_update}
 LINE_FAULTS = {Fault.backlight, Fault.tft_lot}
 # Which panel charts each line fault is expected to move.
 FAULT_METRICS = {Fault.backlight: "white_luminance", Fault.tft_lot: "tft_vth"}
@@ -74,9 +94,15 @@ class ChartState:
 class Labeler:
     accuracy: float
     healthy: float
+    rng: random.Random
+    is_model: bool = False
+    version: str | None = None
     fault: Fault | None = None
     z: list[float] = field(default_factory=list)
     chart: ChartState = field(default_factory=ChartState)
+    # Recent samples for root-cause analysis: (sample, z) and each gold answer.
+    points: deque[tuple[int, float]] = field(default_factory=lambda: deque(maxlen=HISTORY))
+    answers: deque[list[Observation]] = field(default_factory=lambda: deque(maxlen=HISTORY))
 
 
 @dataclass
@@ -97,8 +123,16 @@ class Line:
 class LiveDemo:
     def __init__(self, seed: int | None = None):
         self.rng = random.Random(seed)
+        # Classes and the judge draw from their own streams, so the people's and the
+        # panels' numbers don't depend on them.
+        self.class_rng = random.Random(None if seed is None else seed + 1)
+        judge_rng = random.Random(None if seed is None else seed + 2)
         self.sample = 0
-        self.labelers = {name: Labeler(acc, acc) for name, acc in LABELERS.items()}
+        self.labelers = {name: Labeler(acc, acc, self.rng) for name, acc in LABELERS.items()}
+        self.labelers[JUDGE] = Labeler(
+            JUDGE_ACCURACY, JUDGE_ACCURACY, judge_rng, is_model=True, version=JUDGE_VERSIONS[0]
+        )
+        self.changes: list[Event] = []  # model updates, for root-cause analysis
         self.lines = {line: Line() for line in LINES}
         self.charts = {(line, m): PanelChart() for line in LINES for m in PANEL_METRICS}
         self.pending: list[dict[str, Any]] = []  # events to send with the next sample
@@ -111,12 +145,15 @@ class LiveDemo:
             "gold_per_sample": GOLD_PER_SAMPLE,
             "baseline_samples": BASELINE_SAMPLES,
             "labelers": list(LABELERS),
+            "judge": JUDGE,
+            "judge_version": JUDGE_VERSIONS[0],
             "lines": list(LINES),
             "metrics": [
                 {"key": m, "name": METRICS[m].name, "unit": METRICS[m].unit} for m in PANEL_METRICS
             ],
             "faults": {
                 "labeler": [f.value for f in LABELER_FAULTS],
+                "judge": [f.value for f in JUDGE_FAULTS],
                 "line": [f.value for f in LINE_FAULTS],
             },
         }
@@ -126,7 +163,23 @@ class LiveDemo:
     def inject(self, fault: Fault, target: str) -> None:
         """Start a fault on a labeler or a line. Raises KeyError for an unknown target or
         a fault that doesn't apply to it."""
-        if fault in LABELER_FAULTS:
+        if fault in JUDGE_FAULTS:
+            if target != JUDGE:
+                raise KeyError(target)
+            judge = self.labelers[JUDGE]
+            judge.fault, judge.version = fault, JUDGE_VERSIONS[1]
+            judge.chart.start(fault, self.sample + 1)
+            self.changes.append(
+                Event(
+                    "model_update",
+                    f"Model update: {JUDGE_VERSIONS[0]} to {JUDGE_VERSIONS[1]}",
+                    _at(self.sample + 1),
+                    self.sample + 1,
+                )
+            )
+        elif fault in LABELER_FAULTS:
+            if target == JUDGE:
+                raise KeyError(target)
             labeler = self.labelers[target]
             labeler.fault = fault
             if fault is Fault.rush:
@@ -149,6 +202,7 @@ class LiveDemo:
         for labeler in self.labelers.values():
             labeler.accuracy, labeler.fault = labeler.healthy, None
             labeler.chart.clear(next_sample)
+        self.labelers[JUDGE].version = JUDGE_VERSIONS[0]
         for line in self.lines.values():
             line.aged, line.lot_left = None, 0
         for chart in self.charts.values():
@@ -182,11 +236,23 @@ class LiveDemo:
     def _step_labeler(self, name: str, lab: Labeler, events: list) -> dict[str, Any]:
         if lab.fault is Fault.drift:
             lab.accuracy = max(DRIFT_FLOOR, lab.accuracy - DRIFT_PER_SAMPLE)
-        errors = sum(self.rng.random() > lab.accuracy for _ in range(GOLD_PER_SAMPLE))
+        answers = []
+        for i in range(GOLD_PER_SAMPLE):
+            cls = self.class_rng.choice(CIFAR_CLASSES)
+            accuracy = lab.accuracy
+            if lab.fault is Fault.model_update and cls in BROKEN_CLASSES:
+                accuracy = BROKEN_ACCURACY
+            wrong = lab.rng.random() > accuracy
+            answers.append(Observation(_at(self.sample, i), wrong, {"class": cls}, self.sample))
+        errors = sum(o.defect for o in answers)
         (point,) = p_chart([(errors, GOLD_PER_SAMPLE)], TARGET_ERROR_RATE)
         lab.z = (lab.z + [point.z])[-8:]  # the longest Western Electric window
+        lab.points.append((self.sample, point.z))
+        lab.answers.append(answers)
         rule = _latest_violation(lab.z, worse_only=True)
         self._grade(lab.chart, name, rule, events)
+        if rule and events and events[-1].get("chart") == name:
+            events[-1]["causes"] = self._explain(name, lab)
         return {
             "name": name,
             "error_rate": point.p,
@@ -195,7 +261,33 @@ class LiveDemo:
             "lcl": point.lcl,
             "signal": "alarm" if rule else None,
             "rule": rule,
+            "version": lab.version,
         }
+
+    def _explain(self, name: str, lab: Labeler) -> list[dict[str, Any]]:
+        """The top causes of the alarm on `name`'s newest point."""
+        peers = {
+            other: [o for sample in peer.answers for o in sample]
+            for other, peer in self.labelers.items()
+            if other != name and not peer.is_model
+        }
+        analysis = analyze(
+            [o for sample in lab.answers for o in sample],
+            days=[s for s, _ in lab.points],
+            z=[z for _, z in lab.points],
+            alert_day=self.sample,
+            center=TARGET_ERROR_RATE,
+            events=self.changes if lab.is_model else (),
+            peers=peers,
+            dimensions={"class": "true class"},
+            subject=name,
+            unit="sample",
+            when=lambda s: f"at sample {s}",
+        )
+        return [
+            {"kind": c.kind.value, "title": c.title, "explanation": c.explanation, "score": c.score}
+            for c in analysis.causes[:CAUSES_SHOWN]
+        ]
 
     def _step_panel(self, line: str, metric: str, values: list[float], events: list):
         chart = self.charts[line, metric]
@@ -249,6 +341,11 @@ class LiveDemo:
                 events[-1].update(base)
         elif state.cleared_at is None or self.sample - state.cleared_at >= GRACE_SAMPLES:
             events.append({"type": "false_alarm", **base})
+
+
+def _at(sample: int, i: int = 0) -> datetime:
+    """A timestamp for answer `i` of `sample`, so events sort against answers."""
+    return _EPOCH + timedelta(minutes=sample, seconds=i)
 
 
 def _latest_violation(z: list[float], worse_only: bool) -> str | None:

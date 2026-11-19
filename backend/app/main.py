@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.routers import (
     audit_log,
     auth,
+    events,
     labeling,
     live,
     panel_line,
@@ -34,7 +35,18 @@ def create_app() -> FastAPI:
     )
 
     api = APIRouter(prefix="/api")
-    for module in (auth, users, projects, labeling, quality, review, audit_log, panel_line, live):
+    for module in (
+        auth,
+        users,
+        projects,
+        labeling,
+        quality,
+        events,
+        review,
+        audit_log,
+        panel_line,
+        live,
+    ):
         api.include_router(module.router)
 
     @api.get("/health", tags=["meta"])
