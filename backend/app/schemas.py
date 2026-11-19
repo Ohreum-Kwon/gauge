@@ -139,12 +139,35 @@ class ChartPointOut(BaseModel):
     error_rate: float
     ucl: float
     lcl: float
+    # Model labelers only: the model version behind most of the day's labels.
+    model_version: str | None = None
 
 
 class ControlChart(BaseModel):
     user_id: int
     center: float
     points: list[ChartPointOut]
+    alerts: list[AlertOut]
+
+
+class JudgeAgreementPointOut(BaseModel):
+    day: date
+    compared: int  # the judge's labels on items the reference people labeled
+    disagreements: int
+    disagreement_rate: float
+    ucl: float
+    lcl: float
+    model_version: str | None
+
+
+class JudgeAgreementChartOut(BaseModel):
+    """A model labeler's disagreement with in-control people, against its own baseline."""
+
+    user_id: int
+    center: float
+    baseline_days: int
+    reference_user_ids: list[int]
+    points: list[JudgeAgreementPointOut]
     alerts: list[AlertOut]
 
 
@@ -160,6 +183,9 @@ class LabelerQualityOut(BaseModel):
     fast_share: float | None
     status: str
     latest_alert: AlertOut | None
+    # True for a model labeler (an LLM judge) running in shadow mode.
+    is_model: bool = False
+    model_version: str | None = None
 
 
 class PairAgreementOut(BaseModel):

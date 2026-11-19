@@ -51,6 +51,10 @@ class User(SQLModel, table=True):
     email: str = Field(unique=True, index=True, max_length=320)
     password_hash: str
     role: Role
+    # A model labeler (an LLM judge) rather than a person. It labels in shadow mode: its
+    # labels are charted like anyone's, but don't count toward an item's required labels,
+    # agreement among people, or final labels.
+    is_model: bool = Field(default=False, sa_column_kwargs={"server_default": "false"})
     created_at: datetime = created_at_field()
 
 
@@ -93,6 +97,8 @@ class Item(SQLModel, table=True):
     gold_answer: str | None = None
     # How many labelers a regular item goes to: 1, or project.overlap_labelers for overlap items.
     required_labels: int = Field(default=1, sa_column_kwargs={"server_default": "1"})
+    # The upload the item came in, so root-cause analysis can ask "is it one batch?".
+    batch: str | None = Field(default=None, max_length=100)
     created_at: datetime = created_at_field()
 
 
@@ -117,6 +123,31 @@ class Label(SQLModel, table=True):
     assignment_id: int = Field(foreign_key="assignments.id", unique=True, ondelete="CASCADE")
     value: str = Field(max_length=200)
     time_spent_ms: int = Field(ge=0)
+    # Set for model labelers: the model that gave this label, e.g. "sim-judge-v2".
+    model_version: str | None = Field(default=None, max_length=100)
+    created_at: datetime = created_at_field()
+
+
+class EventKind(StrEnum):
+    guideline_change = "guideline_change"
+    model_update = "model_update"
+    batch_upload = "batch_upload"
+
+
+class ProjectEvent(SQLModel, table=True):
+    """Something that changed in a project at a known time: a labeling guideline edit, a
+    model labeler switching versions, or a new batch of items. Root-cause analysis checks
+    whether a control chart's shift started right after one of these."""
+
+    __tablename__ = "project_events"
+
+    id: int | None = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="projects.id", index=True, ondelete="CASCADE")
+    kind: EventKind
+    description: str = Field(max_length=500)
+    # For a model update: the model labeler it applies to. Null means the whole project.
+    user_id: int | None = Field(default=None, foreign_key="users.id", ondelete="CASCADE")
+    occurred_at: datetime = Field(sa_type=DateTime(timezone=True))
     created_at: datetime = created_at_field()
 
 

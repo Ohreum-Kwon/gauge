@@ -59,6 +59,8 @@ def flagged_days(project: Project, rows: list[LabelRow]) -> dict[int, set[date]]
 
 
 def _regular_labels(project: Project, rows: list[LabelRow]) -> dict[int, list[ReviewLabel]]:
+    # Model labelers run in shadow mode: they're monitored, but don't vote.
+    rows = [r for r in rows if not r.is_model]
     flagged = flagged_days(project, rows)
     labels: dict[int, list[ReviewLabel]] = defaultdict(list)
     for row in rows:

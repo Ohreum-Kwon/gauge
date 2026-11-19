@@ -10,7 +10,14 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
+# Stored for accounts nobody signs in to, such as model labelers. Not a bcrypt hash, so
+# no password matches it.
+NO_PASSWORD = "!"
+
+
 def verify_password(password: str, password_hash: str) -> bool:
+    if password_hash == NO_PASSWORD:
+        return False
     return bcrypt.checkpw(password.encode(), password_hash.encode())
 
 

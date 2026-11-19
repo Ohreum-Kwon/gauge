@@ -4,6 +4,7 @@ Each request draws a gold item (known answer) with probability gold_rate, otherw
 regular item. Labelers can't tell the two apart, which is what makes gold accuracy an
 honest measurement. Every labeler may see each gold item once; regular items go to
 `required_labels` labelers (1, or the project's overlap_labelers for overlap items).
+Model labelers (LLM judges) don't use this queue: see app.services.judge.
 """
 
 import random
@@ -63,8 +64,15 @@ def _not_seen_by(user: User):
 
 
 def _assignment_count():
+    """People assigned to the item. Model labelers label in shadow mode, on top of the
+    item's required labels, so they don't take a person's place."""
     return (
-        select(func.count()).where(Assignment.item_id == Item.id).correlate(Item).scalar_subquery()
+        select(func.count())
+        .select_from(Assignment)
+        .join(User, col(User.id) == Assignment.user_id)
+        .where(Assignment.item_id == Item.id, col(User.is_model).is_(False))
+        .correlate(Item)
+        .scalar_subquery()
     )
 
 

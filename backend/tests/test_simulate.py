@@ -61,6 +61,18 @@ def test_simulation_flags_the_drifter_on_day_6(committing_session, tmp_path, mon
     assert by_name["rusher"].status == "out_of_control"
     assert by_name["rusher"].fast_share > 0.9
 
+    # The judge's model update on day 6: its agreement with the in-control people
+    # catches it that day, and its gold chart goes out of control too.
+    judge = by_name["judge"]
+    assert judge.user.is_model and judge.model_version == "sim-judge-v2"
+    assert judge.status == "out_of_control"
+    assert alert_days("judge")[0] in (6, 7)
+    chart = quality.judge_chart_for(session, project, judge.user)
+    first = chart.days[0].day
+    assert chart.reference_user_ids == [by_name["reliable"].user.id]
+    assert [(a.day - first).days + 1 for a in chart.alerts if a.violation.above][0] == 6
+    assert [d.model_version for d in chart.days[4:6]] == ["sim-judge-v1", "sim-judge-v2"]
+
     # The rusher agrees with nobody beyond chance; the others mostly agree.
     rusher_id = by_name["rusher"].user.id
     for pair in agreement.pairs:
